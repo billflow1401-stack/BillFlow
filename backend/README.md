@@ -2,11 +2,9 @@
 
 This is the Node.js / Express API for BillFlow-Pro.
 
-## Production Deployment
+## Overview
 
-All production deployment instructions, environment variable configurations, security constraints, and database connectivity requirements are documented in the root deployment guide.
-
-**➡️ Please refer to the [DEPLOYMENT.md](../DEPLOYMENT.md) guide at the root of the repository.**
+This is the Node.js / Express REST API for BillFlow-Pro, connected to MongoDB Atlas.
 
 ## Local Development
 

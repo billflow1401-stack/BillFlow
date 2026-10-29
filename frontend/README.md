@@ -2,11 +2,9 @@
 
 This is the React / Vite Single Page Application (SPA) for BillFlow-Pro.
 
-## Production Deployment
+## Overview
 
-All production deployment instructions, environment variable configurations, and SPA routing requirements are documented in the root deployment guide.
-
-**➡️ Please refer to the [DEPLOYMENT.md](../DEPLOYMENT.md) guide at the root of the repository.**
+This is the React / Vite Single Page Application (SPA) for BillFlow-Pro.
 
 ## Local Development
 

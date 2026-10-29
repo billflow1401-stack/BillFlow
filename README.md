@@ -11,16 +11,16 @@ This repository is organized as a monorepo containing:
 
 ## Production Deployment
 
-This application is fully production-ready. All instructions regarding environment variables, architecture, security, and startup commands have been consolidated into the deployment guide.
+BillFlow-Pro is deployed and hosted on Render:
+- **Frontend SPA**: https://billflow-frontend-xsox.onrender.com
+- **Backend API**: https://billflow-backend-ehym.onrender.com
 
-**➡️ Please refer to the [DEPLOYMENT.md](./DEPLOYMENT.md) guide for all production setup and configuration instructions.**
+The application uses hybrid client-side URL detection: accessing it via `localhost` automatically routes to your local backend, while accessing it on Render routes to the production API.
 
 ## Development
 
-For local development setup, refer to the respective directory documentation or follow the standard `npm install` and `npm run dev` / `npm start` commands in each directory.
-
-- Frontend runs on `http://localhost:5173`
-- Backend runs on `http://localhost:5000`
+- Frontend dev server: `npm run dev` (runs on `http://localhost:5173`)
+- Backend server: `npm start` (runs on `http://localhost:5000`)
 
 ## Features
 
