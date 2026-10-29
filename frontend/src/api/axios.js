@@ -28,7 +28,7 @@ export const getApiBaseUrl = () => {
       if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
         return envUrl;
       }
-      return 'https://backend-z5xa.onrender.com/api/v1';
+      return 'https://billflow-backend-ehym.onrender.com/api/v1';
     }
   }
 

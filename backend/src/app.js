@@ -56,22 +56,21 @@ const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (env.corsOrigins.includes(origin)) return callback(null, true);
-    if (env.nodeEnv === 'development') {
-      try {
-        const parsed = new URL(origin);
-        const host = parsed.hostname;
-        if (
-          host === 'localhost' ||
-          host === '127.0.0.1' ||
-          /^192\.168\./.test(host) ||
-          /^10\./.test(host) ||
-          /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
-          host.endsWith('.local')
-        ) {
-          return callback(null, true);
-        }
-      } catch (e) {}
-    }
+    try {
+      const parsed = new URL(origin);
+      const host = parsed.hostname;
+      if (
+        host.endsWith('.onrender.com') ||
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        /^192\.168\./.test(host) ||
+        /^10\./.test(host) ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
+        host.endsWith('.local')
+      ) {
+        return callback(null, true);
+      }
+    } catch (e) {}
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,

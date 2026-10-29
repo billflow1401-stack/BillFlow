@@ -27,6 +27,7 @@ let corsOrigins = [
   'http://127.0.0.1:5173',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  'https://billflow-frontend-xsox.onrender.com',
   'https://frontend-232i.onrender.com'
 ];
 if (process.env.CORS_ORIGIN) {
