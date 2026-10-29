@@ -7,7 +7,7 @@ import Select from '../components/ui/Select';
 import { Card } from '../components/ui/Card';
 import api from '../api/axios';
 import { formatApiError } from '../utils/apiError';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, getTodayLocalDate, toLocalIsoDateTime } from '../utils/formatters';
 import { INDIAN_STATES, getStateCodeFromGstin } from '../utils/gstStateCodes';
 
 const GSTIN_REGEX = /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}$/;
@@ -47,7 +47,7 @@ const InvoiceCreatePage = () => {
   const [registeredPlaceOfSupply, setRegisteredPlaceOfSupply] = useState('');
   const [registeredDeliveryState, setRegisteredDeliveryState] = useState('');
 
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getTodayLocalDate());
   const [notes, setNotes] = useState('');
 
   const [lineItems, setLineItems] = useState([
@@ -309,7 +309,7 @@ const InvoiceCreatePage = () => {
       deliveryState: billingMode === 'GST-Registered'
         ? (registeredDeliveryState || undefined)
         : undefined,
-      date: new Date(date).toISOString(),
+      date: toLocalIsoDateTime(date),
       notes,
       items: validLineItems.map(li => ({
         itemId: li.itemId,

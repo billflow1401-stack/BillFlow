@@ -38,18 +38,31 @@ const InvoiceAuditTrail = ({ invoice, payments = [] }) => {
   // If there are recorded payments not yet in auditTrail, ensure they appear in timeline
   if (payments && payments.length > 0) {
     payments.forEach(p => {
-      const alreadyLogged = timeline.some(t =>
-        t.action === 'PAYMENT_RECORDED' &&
-        t.description.includes(String(p.amount))
-      );
+      const rawAmt = p.amount?.$numberDecimal || p.amount || 0;
+      const numAmt = Number(rawAmt);
+      const amtStr = numAmt.toFixed(2);
+
+      const alreadyLogged = timeline.some(t => {
+        const isPaymentAction = t.action === 'PAYMENT_RECORDED' || t.action === 'SETTLEMENT_PAYMENT';
+        if (!isPaymentAction) return false;
+        return (
+          t.description && (
+            t.description.includes(amtStr) ||
+            t.description.includes(String(numAmt))
+          )
+        );
+      });
+
       if (!alreadyLogged) {
+        const rawWaiver = p.settlementDiscount?.$numberDecimal || p.settlementDiscount || 0;
+        const waiverStr = Number(rawWaiver).toFixed(2);
         timeline.push({
           action: p.isFinalSettlement ? 'SETTLEMENT_PAYMENT' : 'PAYMENT_RECORDED',
           description: p.isFinalSettlement
-            ? `Payment of ₹${p.amount} recorded with Full & Final Settlement waiver of ₹${p.settlementDiscount || '0.00'}`
-            : `Payment of ₹${p.amount} received via ${p.method || 'Standard'} ${p.referenceNumber ? `(Ref: ${p.referenceNumber})` : ''}`,
+            ? `Payment of ₹${amtStr} recorded with Full & Final Settlement waiver of ₹${waiverStr}`
+            : `Payment of ₹${amtStr} received via ${p.method || 'Standard'} ${p.referenceNumber ? `(Ref: ${p.referenceNumber})` : ''}`,
           performedBy: 'Billing Department',
-          timestamp: p.paymentDate || p.createdAt
+          timestamp: p.createdAt || p.paymentDate
         });
       }
     });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, getTodayLocalDate, toLocalIsoDateTime } from '../../utils/formatters';
 import { formatApiError } from '../../utils/apiError';
 
 const PaymentSection = ({ invoice, onPaymentSuccess }) => {
@@ -13,7 +13,7 @@ const PaymentSection = ({ invoice, onPaymentSuccess }) => {
   // Payment Form State
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('UPI');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentDate, setPaymentDate] = useState(getTodayLocalDate());
   const [referenceNumber, setReferenceNumber] = useState('');
   const [notes, setNotes] = useState('');
   const [isFinalSettlement, setIsFinalSettlement] = useState(false);
@@ -45,6 +45,7 @@ const PaymentSection = ({ invoice, onPaymentSuccess }) => {
   const openStandardPayment = () => {
     setAmount('');
     setMethod('UPI');
+    setPaymentDate(getTodayLocalDate());
     setIsFinalSettlement(false);
     setSettlementReason('Customer Verbal Negotiation / Agreed Discount');
     setReferenceNumber('');
@@ -56,6 +57,7 @@ const PaymentSection = ({ invoice, onPaymentSuccess }) => {
   const openQuickWaiver = () => {
     setAmount('0');
     setMethod('Settlement Discount');
+    setPaymentDate(getTodayLocalDate());
     setIsFinalSettlement(true);
     setSettlementReason('Round-off / Decimal adjustment');
     setReferenceNumber('');
@@ -75,7 +77,7 @@ const PaymentSection = ({ invoice, onPaymentSuccess }) => {
       await api.post(`/invoices/${invoice._id}/payments`, {
         amount: String(amount || 0).trim(),
         method,
-        paymentDate: new Date(paymentDate).toISOString(),
+        paymentDate: toLocalIsoDateTime(paymentDate),
         referenceNumber: referenceNumber || undefined,
         notes: notes || undefined,
         isFinalSettlement,

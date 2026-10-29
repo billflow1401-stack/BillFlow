@@ -127,3 +127,36 @@ export const numberToIndianWords = (num) => {
   result += ' Only';
   return (n < 0 ? 'Minus ' : '') + result;
 };
+
+/**
+ * Returns today's date formatted as 'YYYY-MM-DD' in the user's local timezone.
+ * Avoids the UTC-offset bug where new Date().toISOString() returns yesterday's date
+ * between 00:00 and 05:30 in timezones like IST (+05:30).
+ * @returns {string} 'YYYY-MM-DD'
+ */
+export const getTodayLocalDate = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+/**
+ * Converts a date input string ('YYYY-MM-DD') into an ISO datetime string.
+ * If the selected date is today, preserves the current local time so timestamps
+ * don't get reset to 00:00:00 UTC (05:30 am IST).
+ * @param {string} dateStr 'YYYY-MM-DD'
+ * @returns {string} ISO-8601 string
+ */
+export const toLocalIsoDateTime = (dateStr) => {
+  if (!dateStr) return new Date().toISOString();
+  const now = new Date();
+  const todayStr = getTodayLocalDate();
+  if (dateStr === todayStr) {
+    return now.toISOString();
+  }
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dateObj = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+  return dateObj.toISOString();
+};
