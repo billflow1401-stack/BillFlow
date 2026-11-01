@@ -13,6 +13,8 @@ const AppError = require('../utils/AppError');
 const { getBounds } = require('../utils/timezone');
 const { generateDocumentIntegrityHash, createVerificationCodes } = require('../utils/documentAuth');
 
+const roundQty = (val) => Math.round(Number(val) * 100) / 100;
+
 /**
  * Get all invoices for the authenticated business with search, filtering and pagination.
  */
@@ -261,23 +263,39 @@ const calculateInvoice = async (businessId, optionsOrCustomerId, itemsPayload) =
   let grandTotal = new Decimal(0);
 
   // --- BULK FETCHING ---
-  const itemIds = [...new Set(itemsPayload.map(p => p.itemId))];
-  const items = await Item.find({ _id: { $in: itemIds }, businessId });
+  const itemIds = [...new Set(itemsPayload.map(p => p.itemId).filter(Boolean))];
+  const items = itemIds.length > 0 ? await Item.find({ _id: { $in: itemIds }, businessId }) : [];
   const itemMap = new Map(items.map(i => [i._id.toString(), i]));
 
   const hsnSacs = [...new Set(items.map(i => i.hsnSac).filter(Boolean))];
-  const taxConfigs = await TaxConfig.find({ hsnSac: { $in: hsnSacs }, businessId });
+  const taxConfigs = hsnSacs.length > 0 ? await TaxConfig.find({ hsnSac: { $in: hsnSacs }, businessId }) : [];
   const taxConfigMap = new Map(taxConfigs.map(tc => [tc.hsnSac, tc]));
   // ---------------------
 
   for (const payloadItem of itemsPayload) {
-    const item = itemMap.get(payloadItem.itemId);
-    if (!item) throw new AppError(`Item not found (ID: ${payloadItem.itemId})`, 404);
+    let item;
+    if (payloadItem.itemId) {
+      item = itemMap.get(payloadItem.itemId.toString());
+      if (!item) throw new AppError(`Item not found (ID: ${payloadItem.itemId})`, 404);
+    } else {
+      // Ad-hoc on-demand item
+      item = {
+        _id: null,
+        name: payloadItem.name ? payloadItem.name.trim() : 'Custom Item',
+        type: payloadItem.type === 'Service' ? 'Service' : 'Product',
+        unitPrice: payloadItem.unitPriceOverride || '0.00',
+        description: '',
+        sku: '',
+        hsnSac: null,
+        taxType: 'Exclusive',
+        unit: 'unit'
+      };
+    }
 
     // Determine unit price
     const rawUnitPrice = payloadItem.unitPriceOverride !== undefined
       ? payloadItem.unitPriceOverride
-      : item.unitPrice;
+      : (item.unitPrice || '0.00');
     const unitPrice = Money.parseInput(rawUnitPrice, { fieldName: 'unitPrice' });
     const unitPriceDec = new Decimal(unitPrice);
 
@@ -302,7 +320,7 @@ const calculateInvoice = async (businessId, optionsOrCustomerId, itemsPayload) =
     let cgstRate = 0;
     let sgstRate = 0;
     let igstRate = 0;
-    let classificationType = 'HSN'; // Fallback if no tax config found, but we will require it if it has gst config
+    let classificationType = item.type === 'Service' ? 'SAC' : 'HSN'; // Fallback matching item type
 
     if (item.hsnSac) {
       const taxConfig = taxConfigMap.get(item.hsnSac);
@@ -340,7 +358,7 @@ const calculateInvoice = async (businessId, optionsOrCustomerId, itemsPayload) =
     });
 
     itemsSnapshot.push({
-      itemId: item._id,
+      itemId: item._id || null,
       type: item.type,
       name: item.name,
       description: item.description,
@@ -682,6 +700,46 @@ const finalizeInvoice = async (businessId, invoiceId) => {
   try {
     let finalizedInvoice;
     await session.withTransaction(async () => {
+      // 0. Auto-create catalogue items for any ad-hoc line items
+      let itemsModified = false;
+      for (const lineItem of invoice.items) {
+        if (!lineItem.itemId) {
+          const trimmedName = (lineItem.name || '').trim();
+          let targetItem = await Item.findOne({
+            businessId,
+            name: { $regex: new RegExp(`^${trimmedName}$`, 'i') }
+          }).session(session);
+
+          const isProduct = lineItem.type === 'Product';
+          // Ensure unit price is stored as the price of 1 item
+          const unitPriceDecimal = Money.toDecimal128(lineItem.unitPrice);
+
+          if (!targetItem) {
+            const [createdItem] = await Item.create([{
+              businessId,
+              name: trimmedName,
+              type: lineItem.type || 'Product',
+              unitPrice: unitPriceDecimal,
+              taxType: 'Exclusive',
+              currentStock: isProduct ? roundQty(lineItem.quantity) : null,
+              lowStockThreshold: isProduct ? 5 : null,
+              isActive: true
+            }], { session });
+            targetItem = createdItem;
+          } else if (isProduct && (targetItem.currentStock === null || targetItem.currentStock < roundQty(lineItem.quantity))) {
+            const neededStock = roundQty(lineItem.quantity);
+            await Item.updateOne(
+              { _id: targetItem._id, businessId },
+              { $set: { currentStock: neededStock } },
+              { session }
+            );
+          }
+
+          lineItem.itemId = targetItem._id;
+          itemsModified = true;
+        }
+      }
+
       // 1. Allocate sequence number atomically
       const counterResult = await Counter.findOneAndUpdate(
         { businessId },
@@ -703,17 +761,22 @@ const finalizeInvoice = async (businessId, invoiceId) => {
       const finalSigner = invoice.businessSnapshot?.signature?.signerName || invoice.businessSnapshot?.ownerName || business.name || 'Authorized Signatory';
 
       // 2. Update the invoice atomically (guarding against concurrent finalizations)
+      const updateFields = {
+        status: 'Unpaid',
+        invoiceNumber: finalInvoiceNumber,
+        'digitalSignature.documentHash': finalHash,
+        'digitalSignature.verificationCode': finalAuthCodes.verificationCode,
+        'digitalSignature.auditId': finalAuthCodes.auditId,
+        'digitalSignature.signedAt': new Date()
+      };
+      if (itemsModified) {
+        updateFields.items = invoice.items;
+      }
+
       const updateResult = await Invoice.findOneAndUpdate(
         { _id: invoiceId, businessId, status: 'Draft' }, // Crucial guard condition
         {
-          $set: {
-            status: 'Unpaid',
-            invoiceNumber: finalInvoiceNumber,
-            'digitalSignature.documentHash': finalHash,
-            'digitalSignature.verificationCode': finalAuthCodes.verificationCode,
-            'digitalSignature.auditId': finalAuthCodes.auditId,
-            'digitalSignature.signedAt': new Date()
-          },
+          $set: updateFields,
           $push: {
             auditTrail: {
               action: 'FINALIZED_AND_ISSUED',

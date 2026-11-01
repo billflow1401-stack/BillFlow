@@ -31,11 +31,27 @@ const optionalMonetaryInput = (fieldName) => {
 
 // Schema for an item in the invoice payload
 const invoiceItemSchema = z.object({
-  itemId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Item ID'),
+  itemId: z.union([
+    z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Item ID'),
+    z.literal(''),
+    z.null()
+  ]).optional().transform(val => (val ? val : undefined)),
+  name: z.string().max(200).optional(),
+  type: z.enum(['Product', 'Service']).optional().default('Product'),
   quantity: z.number().min(0.001, 'Quantity must be greater than 0').max(999999, 'Quantity too large'),
   discount: monetaryInput('Discount', '0.00'),
   unitPriceOverride: optionalMonetaryInput('unitPriceOverride')
-}).strict();
+}).strict().superRefine((data, ctx) => {
+  const hasItemId = Boolean(data.itemId && String(data.itemId).trim().length > 0);
+  const hasName = Boolean(data.name && String(data.name).trim().length > 0);
+  if (!hasItemId && !hasName) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['name'],
+      message: 'Either itemId or a valid item name must be provided'
+    });
+  }
+});
 
 const quickCustomerSchema = z.object({
   name: z.string().max(200).optional(),

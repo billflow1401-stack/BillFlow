@@ -51,8 +51,19 @@ const InvoiceCreatePage = () => {
   const [notes, setNotes] = useState('');
 
   const [lineItems, setLineItems] = useState([
-    { _id: crypto.randomUUID(), itemId: '', quantity: 1, discount: 0, unitPriceOverride: '' }
+    { _id: crypto.randomUUID(), itemId: '', itemName: '', itemType: 'Product', quantity: 1, discount: 0, unitPriceOverride: '' }
   ]);
+  const [openDropdownIndex, setOpenDropdownIndex] = useState(null);
+
+  useEffect(() => {
+    const handleDocumentClick = (e) => {
+      if (!e.target.closest('.line-item-combobox')) {
+        setOpenDropdownIndex(null);
+      }
+    };
+    document.addEventListener('mousedown', handleDocumentClick);
+    return () => document.removeEventListener('mousedown', handleDocumentClick);
+  }, []);
 
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
@@ -121,7 +132,9 @@ const InvoiceCreatePage = () => {
         if (inv.items && inv.items.length > 0) {
           setLineItems(inv.items.map(item => ({
             _id: crypto.randomUUID(),
-            itemId: item.itemId,
+            itemId: item.itemId || '',
+            itemName: item.name || '',
+            itemType: item.type || 'Product',
             quantity: item.quantity,
             discount: item.discount,
             unitPriceOverride: item.unitPrice
@@ -160,6 +173,24 @@ const InvoiceCreatePage = () => {
       console.error('Failed to fetch items', err);
     }
   };
+
+  useEffect(() => {
+    if (items.length > 0) {
+      setLineItems(prev => prev.map(li => {
+        if (li.itemId && !li.itemName) {
+          const matched = items.find(it => it._id === li.itemId);
+          if (matched) {
+            return {
+              ...li,
+              itemName: matched.name,
+              itemType: matched.type || li.itemType || 'Product'
+            };
+          }
+        }
+        return li;
+      }));
+    }
+  }, [items]);
 
   // Handle switching billing mode
   const handleModeChange = (newMode) => {
@@ -204,7 +235,7 @@ const InvoiceCreatePage = () => {
   // Trigger preview calculation when line items, customer or mode changes
   useEffect(() => {
     let ignore = false;
-    const validLineItems = lineItems.filter(li => li.itemId && li.quantity > 0);
+    const validLineItems = lineItems.filter(li => (li.itemId || (li.itemName && li.itemName.trim())) && Number(li.quantity) > 0);
     if (validLineItems.length > 0) {
       const timerId = setTimeout(() => {
         if (!ignore) {
@@ -255,7 +286,9 @@ const InvoiceCreatePage = () => {
           ? (registeredDeliveryState || undefined)
           : undefined,
         items: validLineItems.map(li => ({
-          itemId: li.itemId,
+          ...(li.itemId ? { itemId: li.itemId } : {}),
+          name: li.itemName ? li.itemName.trim() : undefined,
+          type: li.itemType || 'Product',
           quantity: Number(li.quantity),
           discount: li.discount !== '' && li.discount != null ? String(li.discount).trim() : '0.00',
           ...(li.unitPriceOverride !== '' && li.unitPriceOverride != null && { unitPriceOverride: String(li.unitPriceOverride).trim() })
@@ -282,7 +315,15 @@ const InvoiceCreatePage = () => {
   };
 
   const addLineItem = () => {
-    setLineItems([...lineItems, { _id: crypto.randomUUID(), itemId: '', quantity: 1, discount: 0, unitPriceOverride: '' }]);
+    setLineItems([...lineItems, {
+      _id: crypto.randomUUID(),
+      itemId: '',
+      itemName: '',
+      itemType: 'Product',
+      quantity: 1,
+      discount: 0,
+      unitPriceOverride: ''
+    }]);
   };
 
   const removeLineItem = (index) => {
@@ -290,7 +331,7 @@ const InvoiceCreatePage = () => {
   };
 
   const buildInvoicePayload = () => {
-    const validLineItems = lineItems.filter(li => li.itemId && li.quantity > 0);
+    const validLineItems = lineItems.filter(li => (li.itemId || (li.itemName && li.itemName.trim())) && Number(li.quantity) > 0);
     return {
       billingMode,
       customerId: billingMode === 'GST-Registered' ? selectedCustomer : undefined,
@@ -312,7 +353,9 @@ const InvoiceCreatePage = () => {
       date: toLocalIsoDateTime(date),
       notes,
       items: validLineItems.map(li => ({
-        itemId: li.itemId,
+        ...(li.itemId ? { itemId: li.itemId } : {}),
+        name: li.itemName ? li.itemName.trim() : undefined,
+        type: li.itemType || 'Product',
         quantity: Number(li.quantity),
         discount: li.discount !== '' && li.discount != null ? String(li.discount).trim() : '0.00',
         ...(li.unitPriceOverride !== '' && li.unitPriceOverride != null && { unitPriceOverride: String(li.unitPriceOverride).trim() })
@@ -750,7 +793,7 @@ const InvoiceCreatePage = () => {
 
   const handleBackToDashboard = () => {
     const hasUnsavedWork =
-      lineItems.some(i => Boolean(i.itemId && String(i.itemId).trim())) ||
+      lineItems.some(i => Boolean((i.itemId && String(i.itemId).trim()) || (i.itemName && String(i.itemName).trim()))) ||
       Boolean(quickCustomer.name?.trim()) ||
       Boolean(quickCustomer.phone?.trim()) ||
       Boolean(selectedCustomer);
@@ -1152,97 +1195,236 @@ const InvoiceCreatePage = () => {
       <Card className="p-6 mb-8 overflow-visible">
         <h2 className="text-lg font-medium text-gray-900 mb-4 border-b pb-2">Line Items</h2>
         <div className="space-y-4">
-          {lineItems.map((li, index) => (
-            <div key={li._id} className="flex flex-wrap md:flex-nowrap gap-3 items-start bg-gray-50 p-4 rounded-md border border-gray-200">
-              <div className="w-full md:flex-1 min-w-[200px]">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Item</label>
-                <select
-                  id={`line-item-select-${index}`}
-                  className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-                  value={li.itemId}
-                  onChange={e => handleLineChange(index, 'itemId', e.target.value)}
-                >
-                  <option value="">-- Select Item --</option>
-                  {items.map(item => (
-                    <option key={item._id} value={item._id}>
-                      {item.name} {item.hsnSac ? `[HSN/SAC: ${item.hsnSac}]` : ''} — {formatCurrency(item.unitPrice)}
-                    </option>
-                  ))}
-                </select>
-                {li.itemId && (() => {
-                  const chosen = items.find(i => i._id === li.itemId);
-                  if (!chosen) return null;
-                  return (
-                    <div className="mt-1.5 flex flex-wrap gap-1.5 text-xs text-gray-600">
-                      <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-medium border border-indigo-100">
-                        {chosen.type}
+          {lineItems.map((li, index) => {
+            const chosen = items.find(i => i._id === li.itemId);
+            const isCustom = !li.itemId && Boolean(li.itemName?.trim());
+
+            return (
+              <div key={li._id} className="flex flex-wrap md:flex-nowrap gap-3 items-start bg-gray-50 p-4 rounded-md border border-gray-200">
+                {/* Combobox: Item Name / Select */}
+                <div className="w-full md:flex-1 min-w-[220px] relative line-item-combobox">
+                  <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">
+                    Item Name / Select
+                  </label>
+                  <div className="relative rounded-md shadow-2xs">
+                    <input
+                      id={`line-item-input-${index}`}
+                      type="text"
+                      className="block w-full h-10 pl-3 pr-10 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-400"
+                      placeholder="Type custom name or click arrow..."
+                      value={li.itemName || ''}
+                      autoComplete="off"
+                      onChange={e => {
+                        const val = e.target.value;
+                        const match = items.find(it => it.name.toLowerCase() === val.trim().toLowerCase());
+                        const newItems = [...lineItems];
+                        newItems[index] = {
+                          ...newItems[index],
+                          itemName: val,
+                          itemId: match ? match._id : '',
+                          itemType: match ? match.type : (newItems[index].itemType || 'Product'),
+                          ...(match && !newItems[index].unitPriceOverride ? { unitPriceOverride: String(match.unitPrice) } : {})
+                        };
+                        setLineItems(newItems);
+                        setOpenDropdownIndex(index);
+                      }}
+                      onFocus={() => setOpenDropdownIndex(index)}
+                      onKeyDown={e => {
+                        if (e.key === 'Escape') setOpenDropdownIndex(null);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      id={`line-item-dropdown-btn-${index}`}
+                      title="Toggle item catalogue list"
+                      tabIndex={-1}
+                      className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 focus:outline-none cursor-pointer"
+                      onClick={() => setOpenDropdownIndex(openDropdownIndex === index ? null : index)}
+                    >
+                      <svg className={`w-4 h-4 transition-transform ${openDropdownIndex === index ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Dropdown list */}
+                  {openDropdownIndex === index && (
+                    <div
+                      className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-xl max-h-56 overflow-y-auto divide-y divide-gray-100"
+                    >
+                      {(() => {
+                        const query = (li.itemName || '').trim().toLowerCase();
+                        const filtered = query
+                          ? items.filter(it => it.name.toLowerCase().includes(query) || (it.sku && it.sku.toLowerCase().includes(query)) || (it.hsnSac && it.hsnSac.includes(query)))
+                          : items;
+
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="p-3 text-xs text-gray-500 text-center">
+                              No matching catalogue items found. Type custom name above to create as an on-demand {li.itemType || 'Product'}.
+                            </div>
+                          );
+                        }
+
+                        return filtered.map(item => (
+                          <button
+                            key={item._id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50/80 transition-colors flex items-center justify-between gap-2 cursor-pointer"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              const newItems = [...lineItems];
+                              newItems[index] = {
+                                ...newItems[index],
+                                itemId: item._id,
+                                itemName: item.name,
+                                itemType: item.type || 'Product',
+                                unitPriceOverride: String(item.unitPrice)
+                              };
+                              setLineItems(newItems);
+                              setOpenDropdownIndex(null);
+                            }}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 truncate">{item.name}</div>
+                              <div className="text-[11px] text-gray-500 flex items-center gap-2 mt-0.5">
+                                <span className={`px-1.5 py-0.2 rounded font-medium ${item.type === 'Product' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
+                                  {item.type}
+                                </span>
+                                {item.hsnSac && <span>HSN: {item.hsnSac}</span>}
+                                {item.type === 'Product' && (
+                                  <span className={item.currentStock > 0 ? 'text-emerald-600' : 'text-rose-500'}>
+                                    Stock: {item.currentStock ?? 0}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right font-semibold text-gray-800 shrink-0">
+                              {formatCurrency(item.unitPrice)}
+                            </div>
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  )}
+
+                  {/* 2 Small Checkboxes for Product / Services */}
+                  <div className="flex flex-wrap items-center gap-3.5 mt-2">
+                    <label className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        name={`itemType-${index}-Product`}
+                        checked={li.itemType === 'Product'}
+                        onChange={() => {
+                          const newItems = [...lineItems];
+                          newItems[index] = { ...newItems[index], itemType: 'Product' };
+                          setLineItems(newItems);
+                        }}
+                        className="w-3.5 h-3.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <span>Product</span>
+                    </label>
+
+                    <label className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        name={`itemType-${index}-Service`}
+                        checked={li.itemType === 'Service'}
+                        onChange={() => {
+                          const newItems = [...lineItems];
+                          newItems[index] = { ...newItems[index], itemType: 'Service' };
+                          setLineItems(newItems);
+                        }}
+                        className="w-3.5 h-3.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <span>Services</span>
+                    </label>
+
+                    {isCustom ? (
+                      <span className="text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80 inline-flex items-center gap-1">
+                        ✨ On-demand {li.itemType} (auto-adds to catalogue on finalize)
                       </span>
+                    ) : li.itemId ? (
+                      <span className="text-[11px] font-medium text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 inline-flex items-center gap-1">
+                        ✓ Catalogue {li.itemType}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* Extra details for catalogue item */}
+                  {chosen && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5 text-xs text-gray-600">
                       {chosen.hsnSac ? (
-                        <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-mono border border-emerald-100">
+                        <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-mono border border-emerald-100 text-[11px]">
                           HSN/SAC: {chosen.hsnSac}
                         </span>
                       ) : (
-                        <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">Non-GST</span>
+                        <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[11px]">Non-GST</span>
                       )}
                       {chosen.taxType && (
-                        <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-100">
+                        <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-100 text-[11px]">
                           {chosen.taxType} Tax
                         </span>
                       )}
                     </div>
-                  );
-                })()}
-              </div>
+                  )}
+                </div>
 
-              <div className="w-full sm:w-auto min-w-[80px]">
-                <Input
-                  id={`line-item-qty-${index}`}
-                  label="Qty"
-                  type="number"
-                  value={li.quantity}
-                  min="0.001"
-                  step="0.001"
-                  onChange={e => handleLineChange(index, 'quantity', e.target.value)}
-                />
-              </div>
+                <div className="w-full sm:w-auto min-w-[80px]">
+                  <Input
+                    id={`line-item-qty-${index}`}
+                    label="Qty"
+                    type="number"
+                    value={li.quantity}
+                    min="0.001"
+                    step="0.001"
+                    onChange={e => handleLineChange(index, 'quantity', e.target.value)}
+                  />
+                </div>
 
-              <div className="w-full sm:w-auto min-w-[150px]">
-                <Input
-                  id={`line-item-price-${index}`}
-                  label="Price Override (₹)"
-                  type="number"
-                  step="0.01"
-                  value={li.unitPriceOverride}
-                  placeholder={(() => {
-                    const chosen = items.find(i => i._id === li.itemId);
-                    return chosen ? String(chosen.unitPrice) : '0.00';
-                  })()}
-                  onChange={e => handleLineChange(index, 'unitPriceOverride', e.target.value)}
-                />
-              </div>
+                <div className="w-full sm:w-auto min-w-[160px]">
+                  <Input
+                    id={`line-item-price-${index}`}
+                    label="Price Override (₹)"
+                    type="number"
+                    step="0.01"
+                    value={li.unitPriceOverride}
+                    placeholder={chosen ? String(chosen.unitPrice) : '0.00'}
+                    onChange={e => handleLineChange(index, 'unitPriceOverride', e.target.value)}
+                    helperText={(() => {
+                      const unitP = Number(li.unitPriceOverride || chosen?.unitPrice || 0);
+                      const q = Number(li.quantity || 1);
+                      if (q > 1 && unitP > 0) {
+                        return `₹${unitP.toFixed(2)} × ${q} = ₹${(unitP * q).toFixed(2)}`;
+                      }
+                      return null;
+                    })()}
+                  />
+                </div>
 
-              <div className="w-full sm:w-auto min-w-[130px]">
-                <Input
-                  id={`line-item-discount-${index}`}
-                  label="Discount (₹)"
-                  type="number"
-                  step="0.01"
-                  value={li.discount}
-                  onChange={e => handleLineChange(index, 'discount', e.target.value)}
-                />
-              </div>
+                <div className="w-full sm:w-auto min-w-[130px]">
+                  <Input
+                    id={`line-item-discount-${index}`}
+                    label="Discount (₹)"
+                    type="number"
+                    step="0.01"
+                    value={li.discount}
+                    onChange={e => handleLineChange(index, 'discount', e.target.value)}
+                  />
+                </div>
 
-              <div className="w-full sm:w-auto flex items-end pt-6">
-                <Button
-                  variant="danger"
-                  onClick={() => removeLineItem(index)}
-                  className="w-full sm:w-auto"
-                >
-                  Remove
-                </Button>
+                <div className="w-full sm:w-auto flex items-end pt-6">
+                  <Button
+                    variant="danger"
+                    onClick={() => removeLineItem(index)}
+                    className="w-full sm:w-auto"
+                  >
+                    Remove
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div className="pt-2">
             <Button
               id="add-line-item-btn"
