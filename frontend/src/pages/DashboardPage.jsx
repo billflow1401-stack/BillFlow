@@ -10,7 +10,7 @@ import Button from '../components/ui/Button';
 import Spinner from '../components/ui/Spinner';
 
 const DashboardPage = () => {
-  const { user } = useAuth();
+  const { user, business } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -235,9 +235,43 @@ const DashboardPage = () => {
             {reminders.map((r) => {
               const cleanPhone = r.customerPhone ? String(r.customerPhone).replace(/\D/g, '') : '';
               const waNumber = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-              const waText = encodeURIComponent(
-                `Hello ${r.customerName}, gentle reminder regarding invoice #${r.invoiceNumber || 'INV'} with balance due of ${formatCurrency(r.balanceDue)}. Please arrange payment at your earliest convenience. Thank you!`
-              );
+
+              const storeName = business?.name || user?.businessName || 'Our Store';
+              const invoiceNum = r.invoiceNumber || 'INV';
+              const origin = window.location.origin;
+              const receiptUrl = `${origin}/verify/${encodeURIComponent(invoiceNum)}`;
+              const pdfUrl = `${origin}/api/v1/invoices/public/pdf/${encodeURIComponent(invoiceNum)}?receipt=true`;
+
+              const waMessage = 
+`*PAYMENT REMINDER*
+
+Dear *${r.customerName}*,
+
+Greetings from *${storeName}*!
+
+This is a courteous reminder regarding your pending balance for Invoice *#${invoiceNum}*.
+
+📋 *Invoice Summary:*
+• *Invoice Date:* ${formatDate(r.date)}
+• *Total Bill:* ${formatCurrency(r.grandTotal)}
+• *Amount Paid:* ${formatCurrency(r.paidAmount)}
+• *Outstanding Balance Due:* *${formatCurrency(r.balanceDue)}*
+• *Pending Duration:* ${r.daysElapsed} days
+
+📄 *View & Download Official Receipt:*
+${receiptUrl}
+
+📥 *Direct PDF Receipt Link:*
+${pdfUrl}
+
+Kindly arrange the payment at your earliest convenience via UPI, Cash, Card, or Net Banking.
+
+_If you have already processed this payment, please disregard this message._
+
+Thank you for your business!
+*${storeName}*`;
+
+              const waText = encodeURIComponent(waMessage);
 
               return (
                 <Tr key={r._id} className="hover:bg-amber-50/20">

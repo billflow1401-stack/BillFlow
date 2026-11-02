@@ -7,8 +7,9 @@ const { createDraftInvoiceSchema, updateDraftInvoiceSchema, calculateInvoiceSche
 
 const router = express.Router();
 
-// Public verification endpoint (accessible without login for QR scan and public verify portal)
+// Public verification and receipt endpoints (accessible without login for QR scan, public verify portal, and WhatsApp)
 router.get('/public/verify/:code', invoiceController.publicVerify);
+router.get('/public/pdf/:code', invoiceController.publicDownloadPdf);
 
 // All subsequent invoice routes require authentication
 router.use(protect);

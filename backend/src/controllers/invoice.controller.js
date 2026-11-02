@@ -372,6 +372,79 @@ const publicVerify = async (req, res, next) => {
   }
 };
 
+/**
+ * Public endpoint to download or view PDF receipt / invoice by Verification Code or Invoice Number.
+ * Accessible without login so customers receiving a WhatsApp link or scanning a QR code can view/download.
+ */
+const publicDownloadPdf = async (req, res, next) => {
+  try {
+    const rawCode = (req.params.code || '').trim().replace(/^#+/, '');
+    if (!rawCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Verification code or invoice number is required'
+      });
+    }
+
+    const escaped = rawCode.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+    const filterConditions = [
+      { 'digitalSignature.verificationCode': { $regex: `^${escaped}$`, $options: 'i' } },
+      { invoiceNumber: { $regex: `^${escaped}$`, $options: 'i' } },
+      { 'digitalSignature.auditId': { $regex: `^${escaped}$`, $options: 'i' } }
+    ];
+
+    const stripped = rawCode.replace(/^BF-(?:VER|AUDIT)-/i, '').replace(/[^a-zA-Z0-9]/g, '');
+    if (stripped && stripped.length >= 3) {
+      const flexiblePattern = stripped.split('').map(c => c.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')).join('[-_\\s]?');
+      filterConditions.push({ invoiceNumber: { $regex: `^${flexiblePattern}$`, $options: 'i' } });
+    }
+    if (stripped && stripped.length >= 6) {
+      filterConditions.push({ 'digitalSignature.documentHash': { $regex: `^${stripped}`, $options: 'i' } });
+    }
+
+    const invoiceDoc = await Invoice.findOne({ $or: filterConditions });
+    if (!invoiceDoc) {
+      return res.status(404).json({
+        success: false,
+        message: 'No registered tax invoice matches this Verification Code or Invoice Number.'
+      });
+    }
+
+    const businessId = invoiceDoc.businessId;
+    const invoice = await enrichBusinessSnapshot(invoiceDoc, businessId);
+
+    const isReceipt = req.query.type === 'receipt' || req.query.receipt === 'true' || Number(invoice.paymentStatus?.paidAmount) > 0;
+
+    let payments = [];
+    if (isReceipt) {
+      payments = await Payment.find({ invoiceId: invoiceDoc._id, businessId }).sort({ paymentDate: -1, createdAt: -1 }).lean();
+    }
+
+    const rawNumber = invoice.invoiceNumber || invoice._id.toString();
+    const safeFilename = encodeURIComponent(rawNumber.replace(/[^a-zA-Z0-9_-]/g, ''));
+    const filePrefix = isReceipt ? 'Receipt' : 'Invoice';
+
+    const pdfDoc = await pdfService.generateInvoicePdf(invoice, {
+      type: isReceipt ? 'receipt' : 'clean',
+      payments
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filePrefix}-${safeFilename}.pdf"`);
+
+    const chunks = [];
+    pdfDoc.on('data', chunk => chunks.push(chunk));
+    pdfDoc.on('end', () => {
+      const result = Buffer.concat(chunks);
+      res.setHeader('Content-Length', result.length);
+      res.send(result);
+    });
+    pdfDoc.end();
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   calculatePreview,
   createDraft,
@@ -380,5 +453,6 @@ module.exports = {
   getInvoiceById,
   finalize,
   downloadPdf,
-  publicVerify
+  publicVerify,
+  publicDownloadPdf
 };

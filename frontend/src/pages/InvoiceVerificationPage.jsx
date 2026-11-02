@@ -286,6 +286,47 @@ const InvoiceVerificationPage = () => {
                 </div>
               </div>
 
+              {/* Payment Status & Official PDF Download Callout */}
+              {result.paymentStatus && Number(result.paymentStatus.balanceDue) > 0 ? (
+                <div className="bg-amber-950/40 border border-amber-500/40 rounded-xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-amber-300 block">
+                      Outstanding Payment Reminder
+                    </span>
+                    <p className="text-xs text-slate-300 mt-1">
+                      Total Bill: <strong className="text-white">₹{parseFloat(result.summary?.grandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> • 
+                      Paid: <strong className="text-emerald-400">₹{parseFloat(result.paymentStatus.paidAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> • 
+                      Balance Due: <strong className="text-rose-400 font-mono text-sm ml-1">₹{parseFloat(result.paymentStatus.balanceDue).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                    </p>
+                  </div>
+                  <a
+                    href={`${api.defaults.baseURL || '/api/v1'}/invoices/public/pdf/${encodeURIComponent(result.verificationCode || result.invoiceNumber)}?receipt=true`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md transition-all shrink-0"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Download Official PDF Receipt</span>
+                  </a>
+                </div>
+              ) : (
+                <div className="mb-6 flex justify-end">
+                  <a
+                    href={`${api.defaults.baseURL || '/api/v1'}/invoices/public/pdf/${encodeURIComponent(result.verificationCode || result.invoiceNumber)}?receipt=true`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shadow-sm transition-all"
+                  >
+                    <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Download Official Tax Invoice (PDF)</span>
+                  </a>
+                </div>
+              )}
+
               {/* Cryptographic Checksum Token */}
               <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-4">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
