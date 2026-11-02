@@ -238,6 +238,7 @@ const DashboardPage = () => {
 
               const storeName = business?.name || user?.businessName || 'Our Store';
               const invoiceNum = r.invoiceNumber || 'INV';
+              const verCode = r.verificationCode;
 
               // Automatically resolve public live domain so links work on customer mobile phones
               const isLocal = typeof window !== 'undefined' && (
@@ -249,7 +250,10 @@ const DashboardPage = () => {
                 ? 'https://billflow-frontend-xsox.onrender.com'
                 : window.location.origin;
 
-              const receiptUrl = `${publicDomain}/verify/${encodeURIComponent(invoiceNum)}`;
+              // Include verification code so multi-business invoice numbers (e.g. INV-0006) resolve with 100% precision
+              const receiptUrl = verCode
+                ? `${publicDomain}/verify/${encodeURIComponent(invoiceNum)}?code=${encodeURIComponent(verCode)}`
+                : `${publicDomain}/verify/${encodeURIComponent(invoiceNum)}`;
 
               // Clean, robust formatting without fragile 4-byte surrogate emojis that corrupt into 
               const waMessage = 

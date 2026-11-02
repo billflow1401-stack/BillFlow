@@ -8,10 +8,15 @@ const InvoiceVerificationPage = () => {
   const [searchParams] = useSearchParams();
   const { code: paramCode } = useParams();
 
-  const initialCode = paramCode || searchParams.get('code') || searchParams.get('id') || '';
+  const codeParam = searchParams.get('code');
+  const bizParam = searchParams.get('biz') || searchParams.get('businessId');
+
+  // Prefer cryptographic verification code if present in query param or route
+  const initialCode = codeParam || paramCode || searchParams.get('id') || '';
   const initialClaimedAmount = searchParams.get('amount') || '';
 
-  const [inputCode, setInputCode] = useState(initialCode);
+  // Show user-friendly paramCode (e.g. INV-0006) in the search input if available
+  const [inputCode, setInputCode] = useState(paramCode || initialCode);
   const [claimedAmount, setClaimedAmount] = useState(initialClaimedAmount);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -30,7 +35,15 @@ const InvoiceVerificationPage = () => {
     setResult(null);
 
     try {
-      const res = await api.get(`/invoices/public/verify/${encodeURIComponent(query)}`);
+      let endpoint = `/invoices/public/verify/${encodeURIComponent(query)}`;
+      const queryParts = [];
+      if (codeParam && codeParam !== query) queryParts.push(`code=${encodeURIComponent(codeParam)}`);
+      if (bizParam) queryParts.push(`biz=${encodeURIComponent(bizParam)}`);
+      if (queryParts.length > 0) {
+        endpoint += `?${queryParts.join('&')}`;
+      }
+
+      const res = await api.get(endpoint);
       setResult(res.data.data);
     } catch (err) {
       let msg = err.response?.data?.message;

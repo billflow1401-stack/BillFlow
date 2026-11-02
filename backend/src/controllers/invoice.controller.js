@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const invoiceService = require('../services/invoice.service');
 const pdfService = require('../services/pdf.service');
 const Invoice = require('../models/Invoice');
@@ -283,7 +284,11 @@ const downloadPdf = async (req, res, next) => {
  */
 const publicVerify = async (req, res, next) => {
   try {
-    const rawCode = (req.params.code || '').trim().replace(/^#+/, '');
+    const rawParam = (req.params.code || '').trim().replace(/^#+/, '');
+    const queryCode = (req.query.code || '').trim();
+    const queryBiz = (req.query.biz || req.query.businessId || '').trim();
+
+    const rawCode = queryCode || rawParam;
     if (!rawCode) {
       return res.status(400).json({
         success: false,
@@ -292,11 +297,17 @@ const publicVerify = async (req, res, next) => {
     }
 
     const escaped = rawCode.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-    const filterConditions = [
+    let filterConditions = [
       { 'digitalSignature.verificationCode': { $regex: `^${escaped}$`, $options: 'i' } },
-      { invoiceNumber: { $regex: `^${escaped}$`, $options: 'i' } },
       { 'digitalSignature.auditId': { $regex: `^${escaped}$`, $options: 'i' } }
     ];
+
+    if (rawParam && rawParam !== rawCode) {
+      const escapedParam = rawParam.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+      filterConditions.push({ invoiceNumber: { $regex: `^${escapedParam}$`, $options: 'i' } });
+    } else {
+      filterConditions.push({ invoiceNumber: { $regex: `^${escaped}$`, $options: 'i' } });
+    }
 
     // Support legacy or flexible scans where verification code prefixes are stripped
     const stripped = rawCode.replace(/^BF-(?:VER|AUDIT)-/i, '').replace(/[^a-zA-Z0-9]/g, '');
@@ -308,7 +319,12 @@ const publicVerify = async (req, res, next) => {
       filterConditions.push({ 'digitalSignature.documentHash': { $regex: `^${stripped}`, $options: 'i' } });
     }
 
-    const invoice = await Invoice.findOne({ $or: filterConditions }).lean();
+    let queryMatch = { $or: filterConditions };
+    if (queryBiz && mongoose.Types.ObjectId.isValid(queryBiz)) {
+      queryMatch = { $and: [{ businessId: new mongoose.Types.ObjectId(queryBiz) }, queryMatch] };
+    }
+
+    const invoice = await Invoice.findOne(queryMatch).sort({ createdAt: -1 }).lean();
     if (!invoice) {
       return res.status(404).json({
         success: false,
@@ -378,7 +394,11 @@ const publicVerify = async (req, res, next) => {
  */
 const publicDownloadPdf = async (req, res, next) => {
   try {
-    const rawCode = (req.params.code || '').trim().replace(/^#+/, '');
+    const rawParam = (req.params.code || '').trim().replace(/^#+/, '');
+    const queryCode = (req.query.code || '').trim();
+    const queryBiz = (req.query.biz || req.query.businessId || '').trim();
+
+    const rawCode = queryCode || rawParam;
     if (!rawCode) {
       return res.status(400).json({
         success: false,
@@ -387,11 +407,17 @@ const publicDownloadPdf = async (req, res, next) => {
     }
 
     const escaped = rawCode.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-    const filterConditions = [
+    let filterConditions = [
       { 'digitalSignature.verificationCode': { $regex: `^${escaped}$`, $options: 'i' } },
-      { invoiceNumber: { $regex: `^${escaped}$`, $options: 'i' } },
       { 'digitalSignature.auditId': { $regex: `^${escaped}$`, $options: 'i' } }
     ];
+
+    if (rawParam && rawParam !== rawCode) {
+      const escapedParam = rawParam.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+      filterConditions.push({ invoiceNumber: { $regex: `^${escapedParam}$`, $options: 'i' } });
+    } else {
+      filterConditions.push({ invoiceNumber: { $regex: `^${escaped}$`, $options: 'i' } });
+    }
 
     const stripped = rawCode.replace(/^BF-(?:VER|AUDIT)-/i, '').replace(/[^a-zA-Z0-9]/g, '');
     if (stripped && stripped.length >= 3) {
@@ -402,7 +428,12 @@ const publicDownloadPdf = async (req, res, next) => {
       filterConditions.push({ 'digitalSignature.documentHash': { $regex: `^${stripped}`, $options: 'i' } });
     }
 
-    const invoiceDoc = await Invoice.findOne({ $or: filterConditions });
+    let queryMatch = { $or: filterConditions };
+    if (queryBiz && mongoose.Types.ObjectId.isValid(queryBiz)) {
+      queryMatch = { $and: [{ businessId: new mongoose.Types.ObjectId(queryBiz) }, queryMatch] };
+    }
+
+    const invoiceDoc = await Invoice.findOne(queryMatch).sort({ createdAt: -1 });
     if (!invoiceDoc) {
       return res.status(404).json({
         success: false,

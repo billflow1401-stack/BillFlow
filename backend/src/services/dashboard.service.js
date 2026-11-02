@@ -125,7 +125,7 @@ const getDashboardSummary = async (businessId) => {
     Invoice.find(reminderMatch)
       .sort({ date: 1, createdAt: 1 }) // Oldest unsettled first for maximum recovery urgency
       .limit(10)
-      .select('invoiceNumber date createdAt dueDate customerSnapshot billingMode status summary.grandTotal paymentStatus')
+      .select('invoiceNumber date createdAt dueDate customerSnapshot billingMode status summary.grandTotal paymentStatus digitalSignature')
       .lean(),
     Invoice.aggregate([
       { $match: reminderMatch },
@@ -145,6 +145,7 @@ const getDashboardSummary = async (businessId) => {
     return {
       _id: inv._id,
       invoiceNumber: inv.invoiceNumber,
+      verificationCode: inv.digitalSignature?.verificationCode || null,
       date: inv.date,
       createdAt: inv.createdAt,
       dueDate: inv.dueDate,
