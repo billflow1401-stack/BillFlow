@@ -33,6 +33,11 @@ export const formatCurrency = (amount, { isOptional = false } = {}) => {
     return isOptional ? '-' : '₹0.00';
   }
 
+  if (typeof amount === 'object' && amount !== null) {
+    if (amount.$numberDecimal !== undefined) amount = amount.$numberDecimal;
+    else if (amount.value !== undefined) amount = amount.value;
+  }
+
   let str;
   if (typeof amount === 'number') {
     if (isNaN(amount) || !isFinite(amount)) return '[Invalid Amount]';

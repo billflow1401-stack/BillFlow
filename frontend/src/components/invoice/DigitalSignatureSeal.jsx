@@ -49,6 +49,8 @@ const DigitalSignatureSeal = ({
 
         if (isLocalhost && autoIp) {
           baseOrigin = `http://${autoIp}:${window.location.port || '5173'}`;
+        } else if (isLocalhost) {
+          baseOrigin = 'https://billflow-frontend-xsox.onrender.com';
         } else {
           baseOrigin = window.location.origin;
         }

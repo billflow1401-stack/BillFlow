@@ -1,8 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useParams, Link } from 'react-router-dom';
+import { toPng } from 'html-to-image';
+import jsPDF from 'jspdf';
 import api from '../api/axios';
 import Button from '../components/ui/Button';
 import Spinner from '../components/ui/Spinner';
+import InvoiceHeader from '../components/invoice/InvoiceHeader';
+import BillToSection from '../components/invoice/BillToSection';
+import InvoiceItemsTable from '../components/invoice/InvoiceItemsTable';
+import InvoiceTotals from '../components/invoice/InvoiceTotals';
+import InvoicePaymentHistory from '../components/invoice/InvoicePaymentHistory';
+import DigitalSignatureSeal from '../components/invoice/DigitalSignatureSeal';
 
 const InvoiceVerificationPage = () => {
   const [searchParams] = useSearchParams();
@@ -22,6 +30,10 @@ const InvoiceVerificationPage = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  const invoiceSheetRef = useRef(null);
+  const [exportMode, setExportMode] = useState(null);
+  const [downloading, setDownloading] = useState(false);
 
   const verifyInvoice = async (codeToVerify) => {
     const query = (codeToVerify || inputCode || '').trim();
@@ -83,6 +95,143 @@ const InvoiceVerificationPage = () => {
   const numericAuthentic = result ? parseFloat(result.summary?.grandTotal) : null;
   const isAmountForged = hasClaimedAmount && numericClaimed !== null && numericAuthentic !== null && Math.abs(numericClaimed - numericAuthentic) > 0.01;
   const isAmountMatched = hasClaimedAmount && numericClaimed !== null && numericAuthentic !== null && Math.abs(numericClaimed - numericAuthentic) <= 0.01;
+
+  const resolvedInvoice = result ? {
+    ...result,
+    businessSnapshot: result.businessSnapshot || {},
+    customerSnapshot: result.customerSnapshot || {},
+    items: result.items || [],
+    payments: result.payments || [],
+    summary: result.summary || {},
+    paymentStatus: result.paymentStatus || {}
+  } : null;
+
+  const resolvedBusinessSnapshot = result ? {
+    ...(result.businessSnapshot || {}),
+    name: result.businessSnapshot?.name || result.business?.name || '',
+    bankDetails: result.businessSnapshot?.bankDetails || {},
+    signature: result.businessSnapshot?.signature || {
+      url: '',
+      signerName: result.digitalSignature?.signedBy || result.businessSnapshot?.ownerName || '',
+      designation: result.digitalSignature?.designation || 'Authorized Signatory'
+    },
+    seal: result.businessSnapshot?.seal || { url: '' }
+  } : null;
+
+  const handleDownloadPdf = async (type = 'receipt') => {
+    if (!result) return;
+    try {
+      setDownloading(true);
+
+      const isReceipt = type === 'receipt';
+      const payments = result.payments || [];
+      const items = result.items || [];
+      const hasMultiplePayments = payments.length > 1;
+      const hasManyItems = items.length > 2;
+
+      // Multi-page receipt: When payments are made multiple times or items + payments exceed single page space
+      const isMultiPageReceipt = isReceipt && (
+        hasMultiplePayments ||
+        (payments.length > 0 && hasManyItems) ||
+        items.length > 5
+      );
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 5; // 5mm clean page margin
+      const printWidth = pageWidth - (margin * 2);
+
+      if (isMultiPageReceipt) {
+        // --- PAGE 1: FULL BILL DETAILS & TOTALS ---
+        setExportMode('receipt-p1');
+        await new Promise((resolve) => setTimeout(resolve, 150));
+
+        const elementP1 = invoiceSheetRef.current;
+        if (!elementP1) throw new Error('Invoice sheet element not found');
+
+        const imgDataP1 = await toPng(elementP1, {
+          quality: 1,
+          pixelRatio: 2.5,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgPropsP1 = pdf.getImageProperties(imgDataP1);
+        const printHeightP1 = (imgPropsP1.height * printWidth) / imgPropsP1.width;
+        pdf.addImage(imgDataP1, 'PNG', margin, margin, printWidth, printHeightP1, undefined, 'FAST');
+
+        // --- PAGE 2: WHOLE PAYMENT HISTORY & SIGNATURE ---
+        pdf.addPage();
+        setExportMode('receipt-p2');
+        await new Promise((resolve) => setTimeout(resolve, 150));
+
+        const elementP2 = invoiceSheetRef.current;
+        if (!elementP2) throw new Error('Invoice sheet element not found');
+
+        const imgDataP2 = await toPng(elementP2, {
+          quality: 1,
+          pixelRatio: 2.5,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgPropsP2 = pdf.getImageProperties(imgDataP2);
+        const printHeightP2 = (imgPropsP2.height * printWidth) / imgPropsP2.width;
+        pdf.addImage(imgDataP2, 'PNG', margin, margin, printWidth, printHeightP2, undefined, 'FAST');
+
+        const filename = `Receipt-${result.invoiceNumber || 'INV'}.pdf`;
+        pdf.save(filename);
+        return;
+      }
+
+      // --- SINGLE PAGE EXPORT ---
+      setExportMode(type);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      const element = invoiceSheetRef.current;
+      if (element) {
+        const imgData = await toPng(element, {
+          quality: 1,
+          pixelRatio: 2.5,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgProps = pdf.getImageProperties(imgData);
+        const printHeight = (imgProps.height * printWidth) / imgProps.width;
+
+        let heightLeft = printHeight;
+        let position = margin;
+
+        pdf.addImage(imgData, 'PNG', margin, position, printWidth, printHeight, undefined, 'FAST');
+        heightLeft -= (pageHeight - margin * 2);
+
+        while (heightLeft > 0) {
+          position = heightLeft - printHeight + margin;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', margin, position, printWidth, printHeight, undefined, 'FAST');
+          heightLeft -= (pageHeight - margin * 2);
+        }
+
+        const prefix = isReceipt ? 'Receipt' : 'Invoice';
+        const filename = `${prefix}-${result.invoiceNumber || 'INV'}.pdf`;
+        pdf.save(filename);
+        return;
+      }
+    } catch (err) {
+      console.warn('Direct DOM PDF export failed, falling back to server PDF:', err);
+      window.open(
+        `${api.defaults.baseURL || '/api/v1'}/invoices/public/pdf/${encodeURIComponent(result.verificationCode || result.invoiceNumber)}?receipt=${type === 'receipt' ? 'true' : 'false'}`,
+        '_blank'
+      );
+    } finally {
+      setExportMode(null);
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 py-12 px-4 sm:px-6 lg:px-8 selection:bg-indigo-500 selection:text-white">
@@ -312,31 +461,53 @@ const InvoiceVerificationPage = () => {
                       Balance Due: <strong className="text-rose-400 font-mono text-sm ml-1">₹{parseFloat(result.paymentStatus.balanceDue).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                     </p>
                   </div>
-                  <a
-                    href={`${api.defaults.baseURL || '/api/v1'}/invoices/public/pdf/${encodeURIComponent(result.verificationCode || result.invoiceNumber)}?receipt=true`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md transition-all shrink-0"
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleDownloadPdf('receipt')}
+                    disabled={downloading}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md transition-all shrink-0 cursor-pointer"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span>Download Official PDF Receipt</span>
-                  </a>
+                    {downloading ? (
+                      <>
+                        <Spinner size="sm" />
+                        <span>Generating Official PDF...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span>Download Official PDF Receipt</span>
+                      </>
+                    )}
+                  </Button>
                 </div>
               ) : (
                 <div className="mb-6 flex justify-end">
-                  <a
-                    href={`${api.defaults.baseURL || '/api/v1'}/invoices/public/pdf/${encodeURIComponent(result.verificationCode || result.invoiceNumber)}?receipt=true`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shadow-sm transition-all"
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleDownloadPdf('clean')}
+                    disabled={downloading}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shadow-sm transition-all cursor-pointer"
                   >
-                    <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span>Download Official Tax Invoice (PDF)</span>
-                  </a>
+                    {downloading ? (
+                      <>
+                        <Spinner size="sm" />
+                        <span>Generating Official PDF...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span>Download Official Tax Invoice (PDF)</span>
+                      </>
+                    )}
+                  </Button>
                 </div>
               )}
 
@@ -403,6 +574,113 @@ const InvoiceVerificationPage = () => {
           </div>
         )}
       </div>
+
+      {/* Hidden offscreen container for high-fidelity pixel-perfect PDF export */}
+      {result && resolvedInvoice && resolvedBusinessSnapshot && (
+        <div style={{ position: 'fixed', left: '-9999px', top: 0, width: '850px', zIndex: -100, opacity: exportMode ? 1 : 0, pointerEvents: 'none' }}>
+          <div ref={invoiceSheetRef} className="p-8 sm:p-12 bg-white text-slate-900 antialiased">
+            {exportMode === 'receipt-p2' ? (
+              <div className="space-y-6">
+                <div className="border-b border-slate-200 pb-4 mb-6 flex justify-between items-end">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 tracking-tight">{resolvedBusinessSnapshot.name}</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Payment & Settlement Receipt</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-slate-500 block">Invoice Reference</span>
+                    <span className="font-mono font-bold text-slate-900 text-sm">#{resolvedInvoice.invoiceNumber || '0000'}</span>
+                    <span className="text-[11px] font-semibold text-slate-400 block mt-0.5">Page 2 of 2</span>
+                  </div>
+                </div>
+
+                <InvoicePaymentHistory payments={resolvedInvoice.payments} />
+
+                {(resolvedInvoice.notes || resolvedInvoice.terms) && (
+                  <div className="mt-6 pt-4 border-t border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-600">
+                    {resolvedInvoice.notes && (
+                      <div>
+                        <h4 className="font-bold text-slate-900 mb-1 uppercase tracking-wider text-[11px]">Notes</h4>
+                        <p className="whitespace-pre-wrap leading-relaxed">{resolvedInvoice.notes}</p>
+                      </div>
+                    )}
+                    {resolvedInvoice.terms && (
+                      <div>
+                        <h4 className="font-bold text-slate-900 mb-1 uppercase tracking-wider text-[11px]">Terms & Conditions</h4>
+                        <p className="whitespace-pre-wrap leading-relaxed">{resolvedInvoice.terms}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <DigitalSignatureSeal
+                  businessSnapshot={resolvedBusinessSnapshot}
+                  invoice={resolvedInvoice}
+                />
+              </div>
+            ) : exportMode === 'receipt-p1' ? (
+              <>
+                <InvoiceHeader
+                  businessSnapshot={resolvedBusinessSnapshot}
+                  invoice={resolvedInvoice}
+                  showPaymentStatus={true}
+                />
+                <BillToSection
+                  customerSnapshot={resolvedInvoice.customerSnapshot}
+                  invoice={resolvedInvoice}
+                  businessSnapshot={resolvedBusinessSnapshot}
+                  exportMode={exportMode}
+                  isExporting={Boolean(exportMode)}
+                />
+                <InvoiceItemsTable items={resolvedInvoice.items} />
+                <InvoiceTotals
+                  summary={resolvedInvoice.summary}
+                  paymentStatus={resolvedInvoice.paymentStatus}
+                  showPaymentBreakdown={true}
+                />
+                <div className="mt-8 pt-4 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-slate-500">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-700">Tax Invoice & Settlement Overview</span>
+                    <span>•</span>
+                    <span>Invoice #{resolvedInvoice.invoiceNumber || '0000'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 font-semibold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200 text-xs">
+                    <span>Payment & Settlement History on Page 2</span>
+                    <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                    <span className="text-[10px] text-indigo-500 ml-1">(Page 1 of 2)</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <InvoiceHeader
+                  businessSnapshot={resolvedBusinessSnapshot}
+                  invoice={resolvedInvoice}
+                  showPaymentStatus={exportMode === 'receipt'}
+                />
+                <BillToSection
+                  customerSnapshot={resolvedInvoice.customerSnapshot}
+                  invoice={resolvedInvoice}
+                  businessSnapshot={resolvedBusinessSnapshot}
+                  exportMode={exportMode}
+                  isExporting={Boolean(exportMode)}
+                />
+                <InvoiceItemsTable items={resolvedInvoice.items} />
+                <InvoiceTotals
+                  summary={resolvedInvoice.summary}
+                  paymentStatus={resolvedInvoice.paymentStatus}
+                  showPaymentBreakdown={exportMode === 'receipt'}
+                />
+                <DigitalSignatureSeal
+                  businessSnapshot={resolvedBusinessSnapshot}
+                  invoice={resolvedInvoice}
+                />
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

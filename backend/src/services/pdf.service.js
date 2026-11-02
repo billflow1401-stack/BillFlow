@@ -139,15 +139,22 @@ const generateInvoicePdf = async (invoice, options = {}) => {
   const isB2B = invoice.billingMode === 'GST-Registered' || Boolean(customerSnapshot?.gstin);
   const statusUpper = (invoice.status || 'UNPAID').toUpperCase();
 
+  const hasMultiplePayments = payments && payments.length > 1;
+  const hasManyItems = items && items.length > 2;
+
+  // Multi-page receipt: When payments are made multiple times or items + payments exceed single page space
   const isMultiPageReceipt = isReceipt && (
-    (payments && payments.length > 2) ||
-    (items && items.length > 3 && payments && payments.length > 1) ||
+    hasMultiplePayments ||
+    (payments && payments.length > 0 && hasManyItems) ||
     (items && items.length > 5)
   );
 
   const signerName = businessSnapshot?.signature?.signerName || businessSnapshot?.ownerName || businessSnapshot?.name || 'Authorized Signatory';
   const signerDesignation = businessSnapshot?.signature?.designation || 'Authorized Signatory';
   const verificationCode = invoice.digitalSignature?.verificationCode || `BF-VER-${(invoice.invoiceNumber || 'INV').replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase()}`;
+
+  const frontendBaseUrl = process.env.PUBLIC_FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://billflow-frontend-xsox.onrender.com' : 'http://localhost:5173');
+  const qrVerifyUrl = `${frontendBaseUrl}/verify?code=${encodeURIComponent(verificationCode)}`;
   const signatureImg = (businessSnapshot?.signature?.url && businessSnapshot.signature.url.startsWith('data:image/'))
     ? businessSnapshot.signature.url
     : null;
@@ -859,7 +866,7 @@ const generateInvoicePdf = async (invoice, options = {}) => {
                   widths: [40, '*'],
                   body: [
                     [
-                      { qr: `https://frontend-232i.onrender.com/verify?code=${verificationCode}`, fit: 36, alignment: 'center', margin: [0, 1, 0, 0] },
+                      { qr: qrVerifyUrl, fit: 36, alignment: 'center', margin: [0, 1, 0, 0] },
                       {
                         stack: [
                           { text: 'AUTHENTICITY & VERIFICATION', fontSize: 6.5, bold: true, color: '#047857' },

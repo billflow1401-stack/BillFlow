@@ -288,35 +288,52 @@ const publicVerify = async (req, res, next) => {
     const queryCode = (req.query.code || '').trim();
     const queryBiz = (req.query.biz || req.query.businessId || '').trim();
 
-    const rawCode = queryCode || rawParam;
-    if (!rawCode) {
-      return res.status(400).json({
-        success: false,
-        message: 'Verification code or invoice number is required'
-      });
-    }
+    let filterConditions = [];
 
-    const escaped = rawCode.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-    let filterConditions = [
-      { 'digitalSignature.verificationCode': { $regex: `^${escaped}$`, $options: 'i' } },
-      { 'digitalSignature.auditId': { $regex: `^${escaped}$`, $options: 'i' } }
-    ];
+    if (queryCode) {
+      const escapedQuery = queryCode.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+      const strippedQuery = queryCode.replace(/^BF-(?:VER|AUDIT)-/i, '').replace(/[^a-zA-Z0-9]/g, '');
+      const codeMatches = [
+        { 'digitalSignature.verificationCode': { $regex: `^${escapedQuery}$`, $options: 'i' } },
+        { 'digitalSignature.auditId': { $regex: `^${escapedQuery}$`, $options: 'i' } }
+      ];
+      if (strippedQuery && strippedQuery.length >= 4) {
+        codeMatches.push({ 'digitalSignature.verificationCode': { $regex: `${strippedQuery}$`, $options: 'i' } });
+        codeMatches.push({ 'digitalSignature.auditId': { $regex: `${strippedQuery}$`, $options: 'i' } });
+      }
 
-    if (rawParam && rawParam !== rawCode) {
-      const escapedParam = rawParam.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-      filterConditions.push({ invoiceNumber: { $regex: `^${escapedParam}$`, $options: 'i' } });
+      if (rawParam && rawParam.toLowerCase() !== queryCode.toLowerCase()) {
+        const escapedParam = rawParam.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+        filterConditions.push({
+          $and: [
+            { $or: codeMatches },
+            { invoiceNumber: { $regex: `^${escapedParam}$`, $options: 'i' } }
+          ]
+        });
+      }
+      filterConditions.push(...codeMatches);
     } else {
-      filterConditions.push({ invoiceNumber: { $regex: `^${escaped}$`, $options: 'i' } });
-    }
-
-    // Support legacy or flexible scans where verification code prefixes are stripped
-    const stripped = rawCode.replace(/^BF-(?:VER|AUDIT)-/i, '').replace(/[^a-zA-Z0-9]/g, '');
-    if (stripped && stripped.length >= 3) {
-      const flexiblePattern = stripped.split('').map(c => c.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')).join('[-_\\s]?');
-      filterConditions.push({ invoiceNumber: { $regex: `^${flexiblePattern}$`, $options: 'i' } });
-    }
-    if (stripped && stripped.length >= 6) {
-      filterConditions.push({ 'digitalSignature.documentHash': { $regex: `^${stripped}`, $options: 'i' } });
+      const rawCode = rawParam;
+      if (!rawCode) {
+        return res.status(400).json({
+          success: false,
+          message: 'Verification code or invoice number is required'
+        });
+      }
+      const escaped = rawCode.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+      filterConditions.push(
+        { 'digitalSignature.verificationCode': { $regex: `^${escaped}$`, $options: 'i' } },
+        { 'digitalSignature.auditId': { $regex: `^${escaped}$`, $options: 'i' } },
+        { invoiceNumber: { $regex: `^${escaped}$`, $options: 'i' } }
+      );
+      const stripped = rawCode.replace(/^BF-(?:VER|AUDIT)-/i, '').replace(/[^a-zA-Z0-9]/g, '');
+      if (stripped && stripped.length >= 3) {
+        const flexiblePattern = stripped.split('').map(c => c.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')).join('[-_\\s]?');
+        filterConditions.push({ invoiceNumber: { $regex: `^${flexiblePattern}$`, $options: 'i' } });
+      }
+      if (stripped && stripped.length >= 6) {
+        filterConditions.push({ 'digitalSignature.documentHash': { $regex: `^${stripped}`, $options: 'i' } });
+      }
     }
 
     let queryMatch = { $or: filterConditions };
@@ -324,14 +341,18 @@ const publicVerify = async (req, res, next) => {
       queryMatch = { $and: [{ businessId: new mongoose.Types.ObjectId(queryBiz) }, queryMatch] };
     }
 
-    const invoice = await Invoice.findOne(queryMatch).sort({ createdAt: -1 }).lean();
-    if (!invoice) {
+    const invoiceDoc = await Invoice.findOne(queryMatch).sort({ createdAt: -1 });
+    if (!invoiceDoc) {
       return res.status(404).json({
         success: false,
         isAuthentic: false,
         message: 'No registered tax invoice matches this Verification Code or Invoice Number.'
       });
     }
+
+    const businessId = invoiceDoc.businessId;
+    const invoice = await enrichBusinessSnapshot(invoiceDoc, businessId);
+    const payments = await Payment.find({ invoiceId: invoiceDoc._id, businessId }).sort({ paymentDate: -1, createdAt: -1 }).lean();
 
     const documentHash = invoice.digitalSignature?.documentHash || generateDocumentIntegrityHash(invoice);
     const fallbackCodes = createVerificationCodes(documentHash, invoice.date || invoice.createdAt);
@@ -354,14 +375,22 @@ const publicVerify = async (req, res, next) => {
           city: invoice.businessSnapshot?.city,
           state: invoice.businessSnapshot?.state
         },
+        businessSnapshot: invoice.businessSnapshot,
         customer: {
           name: invoice.customerSnapshot?.name,
           gstin: invoice.customerSnapshot?.gstin
         },
+        customerSnapshot: invoice.customerSnapshot,
+        items: invoice.items || [],
+        notes: invoice.notes || '',
+        terms: invoice.terms || '',
+        placeOfSupply: invoice.placeOfSupply,
+        placeOfSupplyStateCode: invoice.placeOfSupplyStateCode,
         summary: {
           grandTotal: invoice.summary?.grandTotal ? String(invoice.summary.grandTotal) : '0.00',
           taxableTotal: invoice.summary?.taxableTotal ? String(invoice.summary.taxableTotal) : '0.00',
-          taxTotal: invoice.summary?.taxTotal ? String(invoice.summary.taxTotal) : '0.00'
+          taxTotal: invoice.summary?.taxTotal ? String(invoice.summary.taxTotal) : '0.00',
+          subtotal: invoice.summary?.subtotal ? String(invoice.summary.subtotal) : '0.00'
         },
         paymentStatus: {
           paidAmount: invoice.paymentStatus?.paidAmount ? String(invoice.paymentStatus.paidAmount) : '0.00',
@@ -369,11 +398,14 @@ const publicVerify = async (req, res, next) => {
           settlementDiscount: invoice.paymentStatus?.settlementDiscount ? String(invoice.paymentStatus.settlementDiscount) : '0.00',
           isSettled: Boolean(invoice.paymentStatus?.isSettled)
         },
+        payments: payments || [],
         digitalSignature: {
           signedBy: invoice.digitalSignature?.signedBy || invoice.businessSnapshot?.ownerName || invoice.businessSnapshot?.name,
           designation: invoice.digitalSignature?.designation || 'Authorized Signatory',
           signedAt: invoice.digitalSignature?.signedAt || invoice.createdAt || invoice.date,
-          documentHash: documentHash
+          documentHash: documentHash,
+          verificationCode: verificationCode,
+          auditId: auditId
         },
         auditTimeline: (invoice.auditTrail || []).map(t => ({
           action: t.action,
@@ -398,34 +430,52 @@ const publicDownloadPdf = async (req, res, next) => {
     const queryCode = (req.query.code || '').trim();
     const queryBiz = (req.query.biz || req.query.businessId || '').trim();
 
-    const rawCode = queryCode || rawParam;
-    if (!rawCode) {
-      return res.status(400).json({
-        success: false,
-        message: 'Verification code or invoice number is required'
-      });
-    }
+    let filterConditions = [];
 
-    const escaped = rawCode.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-    let filterConditions = [
-      { 'digitalSignature.verificationCode': { $regex: `^${escaped}$`, $options: 'i' } },
-      { 'digitalSignature.auditId': { $regex: `^${escaped}$`, $options: 'i' } }
-    ];
+    if (queryCode) {
+      const escapedQuery = queryCode.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+      const strippedQuery = queryCode.replace(/^BF-(?:VER|AUDIT)-/i, '').replace(/[^a-zA-Z0-9]/g, '');
+      const codeMatches = [
+        { 'digitalSignature.verificationCode': { $regex: `^${escapedQuery}$`, $options: 'i' } },
+        { 'digitalSignature.auditId': { $regex: `^${escapedQuery}$`, $options: 'i' } }
+      ];
+      if (strippedQuery && strippedQuery.length >= 4) {
+        codeMatches.push({ 'digitalSignature.verificationCode': { $regex: `${strippedQuery}$`, $options: 'i' } });
+        codeMatches.push({ 'digitalSignature.auditId': { $regex: `${strippedQuery}$`, $options: 'i' } });
+      }
 
-    if (rawParam && rawParam !== rawCode) {
-      const escapedParam = rawParam.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-      filterConditions.push({ invoiceNumber: { $regex: `^${escapedParam}$`, $options: 'i' } });
+      if (rawParam && rawParam.toLowerCase() !== queryCode.toLowerCase()) {
+        const escapedParam = rawParam.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+        filterConditions.push({
+          $and: [
+            { $or: codeMatches },
+            { invoiceNumber: { $regex: `^${escapedParam}$`, $options: 'i' } }
+          ]
+        });
+      }
+      filterConditions.push(...codeMatches);
     } else {
-      filterConditions.push({ invoiceNumber: { $regex: `^${escaped}$`, $options: 'i' } });
-    }
-
-    const stripped = rawCode.replace(/^BF-(?:VER|AUDIT)-/i, '').replace(/[^a-zA-Z0-9]/g, '');
-    if (stripped && stripped.length >= 3) {
-      const flexiblePattern = stripped.split('').map(c => c.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')).join('[-_\\s]?');
-      filterConditions.push({ invoiceNumber: { $regex: `^${flexiblePattern}$`, $options: 'i' } });
-    }
-    if (stripped && stripped.length >= 6) {
-      filterConditions.push({ 'digitalSignature.documentHash': { $regex: `^${stripped}`, $options: 'i' } });
+      const rawCode = rawParam;
+      if (!rawCode) {
+        return res.status(400).json({
+          success: false,
+          message: 'Verification code or invoice number is required'
+        });
+      }
+      const escaped = rawCode.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+      filterConditions.push(
+        { 'digitalSignature.verificationCode': { $regex: `^${escaped}$`, $options: 'i' } },
+        { 'digitalSignature.auditId': { $regex: `^${escaped}$`, $options: 'i' } },
+        { invoiceNumber: { $regex: `^${escaped}$`, $options: 'i' } }
+      );
+      const stripped = rawCode.replace(/^BF-(?:VER|AUDIT)-/i, '').replace(/[^a-zA-Z0-9]/g, '');
+      if (stripped && stripped.length >= 3) {
+        const flexiblePattern = stripped.split('').map(c => c.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')).join('[-_\\s]?');
+        filterConditions.push({ invoiceNumber: { $regex: `^${flexiblePattern}$`, $options: 'i' } });
+      }
+      if (stripped && stripped.length >= 6) {
+        filterConditions.push({ 'digitalSignature.documentHash': { $regex: `^${stripped}`, $options: 'i' } });
+      }
     }
 
     let queryMatch = { $or: filterConditions };
