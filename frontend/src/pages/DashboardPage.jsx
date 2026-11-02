@@ -238,10 +238,20 @@ const DashboardPage = () => {
 
               const storeName = business?.name || user?.businessName || 'Our Store';
               const invoiceNum = r.invoiceNumber || 'INV';
-              const origin = window.location.origin;
-              const receiptUrl = `${origin}/verify/${encodeURIComponent(invoiceNum)}`;
-              const pdfUrl = `${origin}/api/v1/invoices/public/pdf/${encodeURIComponent(invoiceNum)}?receipt=true`;
 
+              // Automatically resolve public live domain so links work on customer mobile phones
+              const isLocal = typeof window !== 'undefined' && (
+                window.location.hostname === 'localhost' ||
+                window.location.hostname === '127.0.0.1' ||
+                window.location.hostname === '[::1]'
+              );
+              const publicDomain = isLocal
+                ? 'https://billflow-frontend-xsox.onrender.com'
+                : window.location.origin;
+
+              const receiptUrl = `${publicDomain}/verify/${encodeURIComponent(invoiceNum)}`;
+
+              // Clean, robust formatting without fragile 4-byte surrogate emojis that corrupt into 
               const waMessage = 
 `*PAYMENT REMINDER*
 
@@ -251,18 +261,15 @@ Greetings from *${storeName}*!
 
 This is a courteous reminder regarding your pending balance for Invoice *#${invoiceNum}*.
 
-📋 *Invoice Summary:*
+*Invoice Summary:*
 • *Invoice Date:* ${formatDate(r.date)}
 • *Total Bill:* ${formatCurrency(r.grandTotal)}
 • *Amount Paid:* ${formatCurrency(r.paidAmount)}
 • *Outstanding Balance Due:* *${formatCurrency(r.balanceDue)}*
 • *Pending Duration:* ${r.daysElapsed} days
 
-📄 *View & Download Official Receipt:*
+*Official Receipt & Payment Details:*
 ${receiptUrl}
-
-📥 *Direct PDF Receipt Link:*
-${pdfUrl}
 
 Kindly arrange the payment at your earliest convenience via UPI, Cash, Card, or Net Banking.
 
