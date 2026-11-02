@@ -12,6 +12,14 @@ import { INDIAN_STATES, getStateCodeFromGstin } from '../utils/gstStateCodes';
 
 const GSTIN_REGEX = /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}$/;
 
+const normalizePhone = (p) => {
+  if (!p) return '';
+  const d = String(p).replace(/\D/g, '');
+  return d.length === 12 && d.startsWith('91')
+    ? d.slice(2)
+    : (d.length === 11 && d.startsWith('0') ? d.slice(1) : d);
+};
+
 const InvoiceCreatePage = () => {
   const [billingMode, setBillingMode] = useState('General'); // 'General' | 'GST-Registered'
   const [customers, setCustomers] = useState([]);
@@ -31,6 +39,41 @@ const InvoiceCreatePage = () => {
     state: ''
   });
   const [showPhoneOnInvoice, setShowPhoneOnInvoice] = useState(false);
+
+  const normPhone = normalizePhone(quickCustomer.phone);
+  const matchedExistingCustomer = normPhone.length >= 10
+    ? customers.find(c => {
+        const cNorm = normalizePhone(c.phone || c.normalizedPhone);
+        return cNorm === normPhone;
+      })
+    : null;
+  const isNewPhone = Boolean(normPhone.length >= 10 && !matchedExistingCustomer);
+  const isMissingRequiredName = Boolean(normPhone.length > 0 && !matchedExistingCustomer && !quickCustomer.name?.trim());
+
+  const handleQuickPhoneChange = (e) => {
+    const rawVal = e.target.value;
+    const norm = normalizePhone(rawVal);
+    if (norm.length >= 10) {
+      const match = customers.find(c => {
+        const cNorm = normalizePhone(c.phone || c.normalizedPhone);
+        return cNorm === norm;
+      });
+      if (match) {
+        setQuickCustomer(prev => ({
+          ...prev,
+          phone: rawVal,
+          name: match.name || prev.name || '',
+          address: match.billingAddress || match.address || prev.address || '',
+          state: match.state || prev.state || ''
+        }));
+        return;
+      }
+    }
+    setQuickCustomer(prev => ({
+      ...prev,
+      phone: rawVal
+    }));
+  };
 
   const isAnonymous = billingMode === 'General' && (!showQuickDetails || (!quickCustomer.name?.trim() && !quickCustomer.phone?.trim()));
 
@@ -372,6 +415,10 @@ const InvoiceCreatePage = () => {
       setError(customerError);
       return;
     }
+    if (billingMode === 'General' && isMissingRequiredName) {
+      setError('Customer name is required when entering a new mobile number.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -404,6 +451,10 @@ const InvoiceCreatePage = () => {
     }
     if (billingMode === 'GST-Registered' && customerError) {
       setError(customerError);
+      return;
+    }
+    if (billingMode === 'General' && isMissingRequiredName) {
+      setError('Customer name is required when entering a new mobile number.');
       return;
     }
 
@@ -927,10 +978,11 @@ const InvoiceCreatePage = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50 p-3.5 rounded-lg border border-gray-200 gap-3">
               <div>
                 <span className="text-sm font-semibold text-gray-900 block">
-                  {quickCustomer.name ? quickCustomer.name : 'Walk-in / Counter Sale'}
+                  {quickCustomer.name ? quickCustomer.name : (isMissingRequiredName ? 'Name Required for New Mobile' : 'Walk-in / Counter Sale')}
                 </span>
                 <span className="text-xs text-gray-500">
                   {quickCustomer.phone ? `Phone: ${quickCustomer.phone}${!showPhoneOnInvoice ? ' (Hidden on bill)' : ''} • ` : ''}
+                  {isMissingRequiredName && <span className="text-rose-600 font-semibold">Name required for new mobile • </span>}
                   {quickCustomer.state ? `State: ${quickCustomer.state}` : 'Statutory Section 10(1)(ca) Intra-state fallback applies if state is unrecorded.'}
                 </span>
               </div>
@@ -944,20 +996,38 @@ const InvoiceCreatePage = () => {
               </Button>
             </div>
 
-
-
             {showQuickDetails && (
               <div className="bg-indigo-50/40 p-4 rounded-lg border border-indigo-100 space-y-4">
-                <div className="text-xs font-semibold text-indigo-900 uppercase tracking-wide">
-                  Optional Walk-in Customer Info (Saved automatically to Customers page)
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-indigo-900 uppercase tracking-wide">
+                  <span>Walk-in Customer Info (Saved automatically to Customers page)</span>
+                  {isMissingRequiredName && (
+                    <span className="text-rose-600 normal-case font-medium flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                      Customer name required for new mobile
+                    </span>
+                  )}
+                  {isNewPhone && !isMissingRequiredName && (
+                    <span className="text-amber-700 normal-case font-medium flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                      New customer will be saved to directory
+                    </span>
+                  )}
+                  {matchedExistingCustomer && (
+                    <span className="text-emerald-700 normal-case font-medium flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                      Existing customer profile matched
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Input
                       id="quick-customer-name"
-                      label="Customer Name"
+                      label={normPhone.length > 0 && !matchedExistingCustomer ? "Customer Name *" : "Customer Name"}
                       placeholder="e.g. Rahul Sharma"
                       value={quickCustomer.name}
+                      error={isMissingRequiredName ? "Customer name is required for new mobile numbers" : null}
+                      helperText={isNewPhone && quickCustomer.name?.trim() ? "✓ New customer will be registered with this name and phone" : null}
                       onChange={e => setQuickCustomer({ ...quickCustomer, name: e.target.value })}
                     />
                   </div>
@@ -967,7 +1037,7 @@ const InvoiceCreatePage = () => {
                       label="Mobile Number"
                       placeholder="10-digit mobile number"
                       value={quickCustomer.phone}
-                      onChange={e => setQuickCustomer({ ...quickCustomer, phone: e.target.value })}
+                      onChange={handleQuickPhoneChange}
                     />
                     <div className="mt-2.5 flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-indigo-100">
                       <input
@@ -986,40 +1056,59 @@ const InvoiceCreatePage = () => {
                         </span>
                       </label>
                     </div>
-                    {(() => {
-                      if (!quickCustomer.phone) return null;
-                      const dIn = quickCustomer.phone.replace(/\D/g, '');
-                      const nIn = dIn.length === 12 && dIn.startsWith('91') ? dIn.slice(2) : (dIn.length === 11 && dIn.startsWith('0') ? dIn.slice(1) : dIn);
-                      if (nIn.length < 10) return null;
-                      const matched = customers.find(c => {
-                        if (!c.phone) return false;
-                        const dCust = c.phone.replace(/\D/g, '');
-                        const nCust = c.normalizedPhone || (dCust.length === 12 && dCust.startsWith('91') ? dCust.slice(2) : (dCust.length === 11 && dCust.startsWith('0') ? dCust.slice(1) : dCust));
-                        return nCust === nIn && (c.gstStatus === 'Registered' || (c.gstin && c.gstin.trim().length > 0));
-                      });
-                      if (!matched) return null;
-                      return (
-                        <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-md text-xs text-amber-900 mt-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                          <div>
-                            <span className="font-bold">Registered profile found:</span> &ldquo;{matched.name}&rdquo; ({matched.gstin}).
-                            <span className="text-[11px] text-amber-800 block">
-                              Currently in General counter receipt mode. If customer claims Input Tax Credit, switch to GST-Registered mode.
-                            </span>
-                          </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => {
-                              handleModeChange('GST-Registered');
-                              handleCustomerSelect(matched._id);
-                            }}
-                          >
-                            Switch to GST-Reg
-                          </Button>
+
+                    {/* Matched registered customer alert */}
+                    {matchedExistingCustomer && (matchedExistingCustomer.gstStatus === 'Registered' || matchedExistingCustomer.gstin) && (
+                      <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-md text-xs text-amber-900 mt-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div>
+                          <span className="font-bold">Registered profile found:</span> &ldquo;{matchedExistingCustomer.name}&rdquo; ({matchedExistingCustomer.gstin}).
+                          <span className="text-[11px] text-amber-800 block">
+                            Currently in General counter receipt mode. If customer claims Input Tax Credit, switch to GST-Registered mode.
+                          </span>
                         </div>
-                      );
-                    })()}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            handleModeChange('GST-Registered');
+                            handleCustomerSelect(matchedExistingCustomer._id);
+                          }}
+                        >
+                          Switch to GST-Reg
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Matched unregistered existing customer badge */}
+                    {matchedExistingCustomer && !(matchedExistingCustomer.gstStatus === 'Registered' || matchedExistingCustomer.gstin) && (
+                      <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-md text-xs text-emerald-900 mt-2 flex items-center gap-2">
+                        <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <div>
+                          <span className="font-bold">Existing Customer:</span> &ldquo;{matchedExistingCustomer.name}&rdquo;
+                          <span className="text-[11px] text-emerald-700 block">
+                            Name and address loaded automatically from customer records.
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* New mobile number notice */}
+                    {isNewPhone && (
+                      <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-md text-xs text-amber-900 mt-2 flex items-center gap-2">
+                        <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div>
+                          <span className="font-bold">New Mobile Number:</span> Customer name is mandatory.
+                          <span className="text-[11px] text-amber-800 block">
+                            This customer will be saved to your Customers directory automatically upon invoice creation.
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1640,7 +1729,8 @@ const InvoiceCreatePage = () => {
               <Button
                 variant="secondary"
                 onClick={saveDraft}
-                disabled={loading || (billingMode === 'GST-Registered' && (!selectedCustomer || !!customerError))}
+                disabled={loading || (billingMode === 'GST-Registered' && (!selectedCustomer || !!customerError)) || (billingMode === 'General' && isMissingRequiredName)}
+                title={isMissingRequiredName ? 'Customer name is required when entering a new mobile number' : undefined}
               >
                 Save Draft
               </Button>
@@ -1648,14 +1738,16 @@ const InvoiceCreatePage = () => {
                 id="finalize-invoice-btn"
                 variant="primary"
                 onClick={finalizeInvoice}
-                disabled={loading || (billingMode === 'GST-Registered' && (!selectedCustomer || !!customerError)) || isRule46Blocked || isPaymentInvalid}
+                disabled={loading || (billingMode === 'GST-Registered' && (!selectedCustomer || !!customerError)) || (billingMode === 'General' && isMissingRequiredName) || isRule46Blocked || isPaymentInvalid}
                 leftIcon={
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                   </svg>
                 }
                 title={
-                  isRule46Blocked
+                  isMissingRequiredName
+                    ? 'Customer name is required when entering a new mobile number'
+                    : isRule46Blocked
                     ? 'Rule 46: Recipient name, address and delivery state required for sales >= ₹50,000'
                     : isPaymentInvalid
                     ? 'Please enter a valid payment amount (<= Grand Total) or choose Pay Later'

@@ -198,7 +198,25 @@ const calculateInvoice = async (businessId, optionsOrCustomerId, itemsPayload) =
       showPhoneOnInvoice
     };
   } else if (quickCustomer && (quickCustomer.name || quickCustomer.phone || quickCustomer.billingAddress || quickCustomer.address || quickCustomer.state)) {
-    const recipientState = quickCustomer.state || placeOfSupplyInput;
+    let resolvedName = (quickCustomer.name && quickCustomer.name.trim()) || '';
+    let resolvedAddress = quickCustomer.billingAddress || quickCustomer.address || '';
+    let resolvedState = quickCustomer.state || placeOfSupplyInput;
+    let resolvedCustomerId = null;
+
+    if (quickCustomer.phone) {
+      const normalizedPhone = Customer.normalizePhone(quickCustomer.phone);
+      if (normalizedPhone) {
+        const existingCust = await Customer.findOne({ businessId, normalizedPhone, isSystemWalkIn: { $ne: true } });
+        if (existingCust) {
+          if (!resolvedName) resolvedName = existingCust.name;
+          if (!resolvedAddress) resolvedAddress = existingCust.billingAddress || existingCust.address || '';
+          if (!resolvedState) resolvedState = existingCust.state || placeOfSupplyInput;
+          resolvedCustomerId = existingCust._id;
+        }
+      }
+    }
+
+    const recipientState = resolvedState || placeOfSupplyInput;
     posResult = determinePlaceOfSupply({
       supplierState,
       isGstRegistered: false,
@@ -208,16 +226,16 @@ const calculateInvoice = async (businessId, optionsOrCustomerId, itemsPayload) =
     });
 
     customerSnapshot = {
-      customerId: null,
-      name: (quickCustomer.name && quickCustomer.name.trim()) || 'Walk-in Customer',
+      customerId: resolvedCustomerId,
+      name: resolvedName || 'Walk-in Customer',
       customerType: 'Individual',
       gstStatus: 'Unregistered',
       billingMode: 'General',
       placeOfSupply: posResult.placeOfSupply,
       placeOfSupplyStateCode: posResult.placeOfSupplyStateCode,
-      billingAddress: quickCustomer.billingAddress || quickCustomer.address,
+      billingAddress: resolvedAddress,
       city: quickCustomer.city,
-      state: quickCustomer.state || posResult.placeOfSupply,
+      state: resolvedState || posResult.placeOfSupply,
       pinCode: quickCustomer.pinCode,
       country: quickCustomer.country || 'India',
       email: quickCustomer.email,
@@ -604,7 +622,7 @@ const updateDraftInvoice = async (businessId, invoiceId, payload) => {
     ? payload.showPhoneOnInvoice
     : (quickCustomer?.showPhoneOnInvoice !== undefined ? quickCustomer.showPhoneOnInvoice : invoice.showPhoneOnInvoice);
 
-  if (billingMode === 'General' && !customerId && quickCustomer && (quickCustomer.name || quickCustomer.phone)) {
+  if (billingMode === 'General' && quickCustomer && (quickCustomer.name || quickCustomer.phone)) {
     const persistedCustomer = await customerService.findOrCreateGeneralCustomer(businessId, quickCustomer);
     customerId = persistedCustomer._id;
   }

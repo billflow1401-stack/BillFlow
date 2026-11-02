@@ -211,10 +211,15 @@ const findOrCreateGeneralCustomer = async (businessId, customerData, session = n
     }
   }
 
-  // If only name provided or phone not found: create a new unregistered customer
+  // If phone was provided but no existing customer was found, customer name is MANDATORY!
+  if (normalizedPhone && (!name || !name.trim())) {
+    throw new AppError('Customer name is required when entering a new mobile number.', 400);
+  }
+
+  // If only name provided or phone not found with valid name: create a new unregistered customer
   const customerToCreate = {
     businessId,
-    name: (name && name.trim()) || 'Walk-in Customer',
+    name: name ? name.trim() : 'Walk-in Customer',
     customerType: customerData.customerType || 'Individual',
     gstStatus: 'Unregistered',
     phone: phone ? phone.trim() : undefined,

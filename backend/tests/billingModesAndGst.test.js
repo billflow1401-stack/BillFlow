@@ -1069,6 +1069,108 @@ test('Customer Phone Match 3: Switching from General mode to GST-Registered mode
   assert.strictEqual(b2bInvoice.customerSnapshot.gstin, '27AAACA9999A1Z5');
 });
 
+test('Customer Phone Match 4: Entering a new mobile number WITHOUT customer name throws 400', async () => {
+  const businessId = new mongoose.Types.ObjectId();
+  const origFindOne = Customer.findOne;
+  Customer.findOne = () => ({
+    session: () => Promise.resolve(null),
+    then: (resolve) => resolve(null)
+  });
+
+  try {
+    const customerService = require('../src/services/customer.service');
+    await assert.rejects(
+      async () => {
+        await customerService.findOrCreateGeneralCustomer(businessId, {
+          name: '',
+          phone: '9876543210'
+        });
+      },
+      (err) => {
+        assert.strictEqual(err.statusCode, 400);
+        assert.match(err.message, /Customer name is required when entering a new mobile number/);
+        return true;
+      }
+    );
+  } finally {
+    Customer.findOne = origFindOne;
+  }
+});
+
+test('Customer Phone Match 5: Entering a new mobile number WITH customer name creates customer and flags _isNewGeneralCustomer', async () => {
+  const businessId = new mongoose.Types.ObjectId();
+  const origFindOne = Customer.findOne;
+  const origCreate = Customer.create;
+
+  Customer.findOne = () => ({
+    session: () => Promise.resolve(null),
+    then: (resolve) => resolve(null)
+  });
+
+  let createdPayload = null;
+  Customer.create = async (docs) => {
+    createdPayload = docs[0];
+    return [{
+      ...docs[0],
+      _id: new mongoose.Types.ObjectId()
+    }];
+  };
+
+  try {
+    const customerService = require('../src/services/customer.service');
+    const result = await customerService.findOrCreateGeneralCustomer(businessId, {
+      name: 'Rohan Mehra',
+      phone: '9876543210',
+      address: 'Shop 4, MG Road',
+      state: 'Maharashtra'
+    });
+
+    assert.strictEqual(result._isNewGeneralCustomer, true);
+    assert.strictEqual(createdPayload.name, 'Rohan Mehra');
+    assert.strictEqual(createdPayload.phone, '9876543210');
+    assert.strictEqual(createdPayload.normalizedPhone, '9876543210');
+    assert.strictEqual(createdPayload.billingAddress, 'Shop 4, MG Road');
+    assert.strictEqual(createdPayload.gstStatus, 'Unregistered');
+  } finally {
+    Customer.findOne = origFindOne;
+    Customer.create = origCreate;
+  }
+});
+
+test('Customer Phone Match 6: Entering existing unregistered mobile number WITHOUT name reuses customer', async () => {
+  const businessId = new mongoose.Types.ObjectId();
+  const existingGeneralCustomer = new Customer({
+    businessId,
+    name: 'Maya Mahal',
+    customerType: 'Individual',
+    gstStatus: 'Unregistered',
+    phone: '9225264817',
+    normalizedPhone: '9225264817',
+    state: 'Maharashtra',
+    billingAddress: 'ulhasnagar, 4 no ot section'
+  });
+
+  const origFindOne = Customer.findOne;
+  Customer.findOne = () => ({
+    session: () => Promise.resolve(existingGeneralCustomer),
+    then: (resolve) => resolve(existingGeneralCustomer)
+  });
+
+  try {
+    const customerService = require('../src/services/customer.service');
+    const result = await customerService.findOrCreateGeneralCustomer(businessId, {
+      name: '',
+      phone: '9225264817'
+    });
+
+    assert.strictEqual(result._id, existingGeneralCustomer._id);
+    assert.strictEqual(result.name, 'Maya Mahal');
+    assert.strictEqual(result._isNewGeneralCustomer, false);
+  } finally {
+    Customer.findOne = origFindOne;
+  }
+});
+
 test('Customer Phone Match 4: Preserving the registered customer\'s profile and GSTIN', async () => {
   const businessId = new mongoose.Types.ObjectId();
   const registeredMasterProfile = new Customer({
