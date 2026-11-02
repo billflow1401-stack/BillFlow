@@ -30,7 +30,7 @@ const DashboardPage = () => {
     };
 
     fetchDashboard();
-  }, [user.token]);
+  }, [user?._id]);
 
   const handleDownloadPdf = async (invoice) => {
     try {
@@ -115,7 +115,9 @@ const DashboardPage = () => {
       {
         label: 'Outstanding Balance',
         value: formatCurrency(kpis.outstandingAmount),
-        subtitle: 'Unpaid & partial balances',
+        subtitle: kpis.overdueRemindersCount > 0
+          ? `${kpis.overdueRemindersCount} bill${kpis.overdueRemindersCount > 1 ? 's' : ''} unsettled > 1 week`
+          : 'Unpaid & partial balances',
         iconBg: Number(kpis.outstandingAmount) > 0 ? 'bg-amber-50 text-amber-600' : 'bg-slate-50 text-slate-500',
         valueClass: Number(kpis.outstandingAmount) > 0 ? 'text-amber-800' : '',
         icon: (
@@ -209,6 +211,154 @@ const DashboardPage = () => {
           ))}
         </div>
       </div>
+    );
+  };
+
+  const renderPaymentReminders = () => {
+    if (!data) return null;
+    const reminders = data.overdueReminders || [];
+    if (reminders.length === 0) return null;
+
+    const totalBalance = data.kpis?.overdueRemindersBalance || '0.00';
+    const count = data.kpis?.overdueRemindersCount || reminders.length;
+
+    return (
+      <Card
+        className="border-amber-200/90 bg-white overflow-hidden shadow-2xs mb-6"
+        padding="none"
+      >
+        {/* Banner Header */}
+        <div className="bg-amber-50/70 p-4 border-b border-amber-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-amber-950">
+                  Payment Follow-up Reminders
+                </h3>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-200/80 text-amber-900">
+                  {count} Pending &gt; 1 Week
+                </span>
+              </div>
+              <p className="text-xs text-amber-800/90 mt-0.5">
+                Bills unsettled for more than 7 days • Total recoverable balance: <span className="font-bold text-amber-950">{formatCurrency(totalBalance)}</span>
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/invoices"
+            className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline self-end sm:self-auto"
+          >
+            View All Invoices &rarr;
+          </Link>
+        </div>
+
+        {/* Reminders Table */}
+        <Table className="border-0 shadow-none rounded-none">
+          <Thead>
+            <Tr hover={false}>
+              <Th>Invoice #</Th>
+              <Th>Customer & Contact</Th>
+              <Th>Aging</Th>
+              <Th>Status</Th>
+              <Th align="right">Total / Paid</Th>
+              <Th align="right">Balance Due</Th>
+              <Th align="right">Actions</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {reminders.map((r) => {
+              const cleanPhone = r.customerPhone ? String(r.customerPhone).replace(/\D/g, '') : '';
+              const waNumber = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+              const waText = encodeURIComponent(
+                `Hello ${r.customerName}, this is a gentle reminder regarding bill #${r.invoiceNumber || 'INV'} for ${formatCurrency(r.grandTotal)}. Pending balance is ${formatCurrency(r.balanceDue)}. Please arrange payment at your convenience. Thank you!`
+              );
+
+              return (
+                <Tr key={r._id} className="hover:bg-amber-50/20">
+                  <Td className="font-semibold text-gray-900 font-mono text-xs">
+                    <Link
+                      to={`/invoices/${r._id}`}
+                      className="text-indigo-600 hover:text-indigo-900 underline"
+                    >
+                      {r.invoiceNumber || 'Invoice'}
+                    </Link>
+                  </Td>
+                  <Td>
+                    <span className="font-semibold text-gray-900 block truncate max-w-[170px]">
+                      {r.customerName}
+                    </span>
+                    {r.customerPhone ? (
+                      <span className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
+                        <span>📞 {r.customerPhone}</span>
+                        {cleanPhone.length >= 10 && (
+                          <a
+                            href={`https://wa.me/${waNumber}?text=${waText}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 font-medium"
+                            title="Send WhatsApp Payment Reminder"
+                          >
+                            <span>WhatsApp</span>
+                          </a>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-gray-400 block">No phone recorded</span>
+                    )}
+                  </Td>
+                  <Td>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-rose-700">
+                        {r.daysElapsed} days pending
+                      </span>
+                      <span className="text-[11px] text-gray-400">
+                        Issued {formatDate(r.date)}
+                      </span>
+                    </div>
+                  </Td>
+                  <Td>
+                    <Badge
+                      status={r.status === 'Partially Paid' ? 'warning' : 'danger'}
+                      size="sm"
+                      dot
+                    >
+                      {r.status}
+                    </Badge>
+                  </Td>
+                  <Td align="right" className="text-xs">
+                    <div className="font-medium text-gray-800 tabular-nums">
+                      {formatCurrency(r.grandTotal)}
+                    </div>
+                    <div className="text-[11px] text-gray-500 tabular-nums">
+                      Paid: {formatCurrency(r.paidAmount)}
+                    </div>
+                  </Td>
+                  <Td align="right">
+                    <span className="text-sm font-bold text-rose-700 tabular-nums block">
+                      {formatCurrency(r.balanceDue)}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Link
+                        to={`/invoices/${r._id}`}
+                        className="inline-flex items-center px-2.5 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-2xs transition-colors"
+                      >
+                        Settle &rarr;
+                      </Link>
+                    </div>
+                  </Td>
+                </Tr>
+              );
+            })}
+          </Tbody>
+        </Table>
+      </Card>
     );
   };
 
@@ -384,6 +534,7 @@ const DashboardPage = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
+              {renderPaymentReminders()}
               {renderRecentInvoices()}
             </div>
 

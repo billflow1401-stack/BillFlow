@@ -106,6 +106,60 @@ const getDashboardSummary = async (businessId) => {
     .select('invoiceNumber date customerSnapshot.name status summary.grandTotal')
     .lean();
 
+  // 5. UNSETTLED PAYMENT REMINDERS (Partially Paid & Unpaid for >= 7 days / 1 week)
+  const Money = require('../utils/money');
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const reminderMatch = {
+    businessId: businessObjectId,
+    status: { $in: ['Partially Paid', 'Unpaid', 'Overdue'] },
+    'paymentStatus.isSettled': { $ne: true },
+    'paymentStatus.balanceDue': { $gt: Money.toDecimal128('0.00') },
+    $or: [
+      { date: { $lte: sevenDaysAgo } },
+      { createdAt: { $lte: sevenDaysAgo } }
+    ]
+  };
+
+  const [overdueInvoices, overdueStats] = await Promise.all([
+    Invoice.find(reminderMatch)
+      .sort({ date: 1, createdAt: 1 }) // Oldest unsettled first for maximum recovery urgency
+      .limit(10)
+      .select('invoiceNumber date createdAt dueDate customerSnapshot billingMode status summary.grandTotal paymentStatus')
+      .lean(),
+    Invoice.aggregate([
+      { $match: reminderMatch },
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          totalBalance: { $sum: "$paymentStatus.balanceDue" }
+        }
+      }
+    ])
+  ]);
+
+  const overdueReminders = overdueInvoices.map(inv => {
+    const invDate = new Date(inv.date || inv.createdAt);
+    const daysElapsed = Math.max(7, Math.floor((now.getTime() - invDate.getTime()) / (1000 * 60 * 60 * 24)));
+    return {
+      _id: inv._id,
+      invoiceNumber: inv.invoiceNumber,
+      date: inv.date,
+      createdAt: inv.createdAt,
+      dueDate: inv.dueDate,
+      daysElapsed,
+      customerName: inv.customerSnapshot?.name || 'Walk-in / Counter Customer',
+      customerPhone: inv.customerSnapshot?.phone || null,
+      customerAddress: inv.customerSnapshot?.billingAddress || inv.customerSnapshot?.address || null,
+      billingMode: inv.billingMode || inv.customerSnapshot?.billingMode || (inv.customerSnapshot?.gstin ? 'GST-Registered' : 'General'),
+      status: inv.status,
+      grandTotal: inv.summary?.grandTotal || '0.00',
+      paidAmount: inv.paymentStatus?.paidAmount || '0.00',
+      balanceDue: inv.paymentStatus?.balanceDue || '0.00'
+    };
+  });
+
   return serializeMonetary({
     kpis: {
       salesTotal: invoiceData.salesTotal || '0.00',
@@ -114,8 +168,11 @@ const getDashboardSummary = async (businessId) => {
       outstandingAmount: invoiceData.outstandingAmount || '0.00',
       taxTotal: invoiceData.taxTotal || '0.00',
       lowStockCount,
-      outOfStockCount
+      outOfStockCount,
+      overdueRemindersCount: overdueStats[0]?.count || 0,
+      overdueRemindersBalance: overdueStats[0]?.totalBalance || '0.00'
     },
+    overdueReminders,
     recentInvoices,
     period: {
       year: currentYear,

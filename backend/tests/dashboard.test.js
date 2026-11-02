@@ -203,4 +203,45 @@ describe('Phase 15 — Dashboard', () => {
     assert.strictEqual(kpis.salesTotal, '200000.00'); // 200k + 0 tax
     assert.strictEqual(kpis.paidTotal, '0.00');
   });
+
+  test('Overdue Reminders: Invoices unsettled for >= 7 days appear in reminders list', async () => {
+    // Create an invoice dated 10 days ago for Business A
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const invRes = await fetch(`${BASE}/invoices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userA.token}` },
+      body: JSON.stringify({
+        customerId: custA._id,
+        date: tenDaysAgo,
+        items: [{ itemId: svcB._id, quantity: 1 }]
+      })
+    });
+    const invData = await invRes.json();
+    assert.strictEqual(invRes.status, 201);
+    const oldInvId = invData.data.invoice._id;
+
+    // Finalize invoice so status becomes Unpaid
+    const finRes = await fetch(`${BASE}/invoices/${oldInvId}/finalize`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${userA.token}` }
+    });
+    assert.strictEqual(finRes.status, 200);
+
+    // Fetch dashboard summary
+    const dashRes = await fetch(`${BASE}/dashboard/summary`, {
+      headers: { Authorization: `Bearer ${userA.token}` }
+    });
+    assert.strictEqual(dashRes.status, 200);
+    const dashData = await dashRes.json();
+
+    assert(dashData.data.kpis.overdueRemindersCount >= 1, 'Should report at least 1 overdue reminder');
+    assert(Number(dashData.data.kpis.overdueRemindersBalance) > 0, 'Overdue reminders balance should be positive');
+
+    const reminder = dashData.data.overdueReminders.find(r => r._id === oldInvId);
+    assert(reminder, 'Old unsettled invoice must be listed in overdueReminders');
+    assert.strictEqual(reminder.customerName, 'Cust A');
+    assert(reminder.daysElapsed >= 10, 'Days elapsed should be >= 10');
+    assert(Number(reminder.balanceDue) > 0, 'Balance due must be positive');
+    assert(['Unpaid', 'Partially Paid'].includes(reminder.status));
+  });
 });

@@ -6,7 +6,7 @@ const MONETARY_FIELD_NAMES = new Set([
   'cgst', 'sgst', 'igst', 'taxAmount', 'lineTotal', 'subTotal',
   'discountTotal', 'taxableTotal', 'cgstTotal', 'sgstTotal', 'igstTotal',
   'taxTotal', 'grandTotal', 'paidAmount', 'balanceDue', 'salesTotal',
-  'outstandingAmount', 'totalTax', 'paidThisMonth'
+  'outstandingAmount', 'totalTax', 'paidThisMonth', 'overdueRemindersBalance'
 ]);
 
 const MONETARY_STRING_REGEX = /^\d+(\.\d{1,2})?$/;
