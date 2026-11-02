@@ -311,10 +311,6 @@ const publicVerify = async (req, res, next) => {
 
     // Support legacy or flexible scans where verification code prefixes are stripped
     const stripped = rawCode.replace(/^BF-(?:VER|AUDIT)-/i, '').replace(/[^a-zA-Z0-9]/g, '');
-    if (stripped && stripped.length >= 4) {
-      filterConditions.push({ 'digitalSignature.verificationCode': { $regex: `BF-VER-${stripped}$`, $options: 'i' } });
-      filterConditions.push({ 'digitalSignature.auditId': { $regex: `${stripped}$`, $options: 'i' } });
-    }
     if (stripped && stripped.length >= 3) {
       const flexiblePattern = stripped.split('').map(c => c.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')).join('[-_\\s]?');
       filterConditions.push({ invoiceNumber: { $regex: `^${flexiblePattern}$`, $options: 'i' } });
@@ -424,10 +420,6 @@ const publicDownloadPdf = async (req, res, next) => {
     }
 
     const stripped = rawCode.replace(/^BF-(?:VER|AUDIT)-/i, '').replace(/[^a-zA-Z0-9]/g, '');
-    if (stripped && stripped.length >= 4) {
-      filterConditions.push({ 'digitalSignature.verificationCode': { $regex: `BF-VER-${stripped}$`, $options: 'i' } });
-      filterConditions.push({ 'digitalSignature.auditId': { $regex: `${stripped}$`, $options: 'i' } });
-    }
     if (stripped && stripped.length >= 3) {
       const flexiblePattern = stripped.split('').map(c => c.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')).join('[-_\\s]?');
       filterConditions.push({ invoiceNumber: { $regex: `^${flexiblePattern}$`, $options: 'i' } });

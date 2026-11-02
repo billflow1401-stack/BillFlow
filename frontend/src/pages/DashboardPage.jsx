@@ -240,9 +240,6 @@ const DashboardPage = () => {
               const invoiceNum = r.invoiceNumber || 'INV';
               const verCode = r.verificationCode;
 
-              // Extract clean, opaque short token (e.g. "F075985A") without sensitive parameters
-              const shortToken = verCode ? verCode.replace(/^BF-(?:VER|AUDIT)-/i, '') : invoiceNum;
-
               // Automatically resolve public live domain so links work on customer mobile phones
               const isLocal = typeof window !== 'undefined' && (
                 window.location.hostname === 'localhost' ||
@@ -253,8 +250,10 @@ const DashboardPage = () => {
                 ? 'https://billflow-frontend-xsox.onrender.com'
                 : window.location.origin;
 
-              // Ultra-short, clean receipt URL without query strings or internal database parameters
-              const receiptUrl = `${publicDomain}/r/${encodeURIComponent(shortToken)}`;
+              // Include verification code so multi-business invoice numbers (e.g. INV-0006) resolve with 100% precision
+              const receiptUrl = verCode
+                ? `${publicDomain}/verify/${encodeURIComponent(invoiceNum)}?code=${encodeURIComponent(verCode)}`
+                : `${publicDomain}/verify/${encodeURIComponent(invoiceNum)}`;
 
               // Clean, robust formatting without fragile 4-byte surrogate emojis that corrupt into 
               const waMessage = 
@@ -273,7 +272,7 @@ This is a courteous reminder regarding your pending balance for Invoice *#${invo
 • *Outstanding Balance Due:* *${formatCurrency(r.balanceDue)}*
 • *Pending Duration:* ${r.daysElapsed} days
 
-*Download Official Receipt & Bill Details:*
+*Official Receipt & Payment Details:*
 ${receiptUrl}
 
 Kindly arrange the payment at your earliest convenience via UPI, Cash, Card, or Net Banking.
