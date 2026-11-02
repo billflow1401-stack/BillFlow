@@ -27,9 +27,12 @@ function App() {
       <AuthProvider>
         <Suspense fallback={<div className="flex h-screen w-full items-center justify-center text-gray-500">Loading...</div>}>
           <Routes>
-            {/* Public Online Verification Portal (Accessible by anyone, QR scanning, auditors) */}
+            {/* Public Online Verification Portal & Short Receipt Links */}
             <Route path="/verify" element={<InvoiceVerificationPage />} />
             <Route path="/verify/:code" element={<InvoiceVerificationPage />} />
+            <Route path="/r/:code" element={<InvoiceVerificationPage />} />
+            <Route path="/d/:code" element={<InvoiceVerificationPage />} />
+            <Route path="/receipt/:code" element={<InvoiceVerificationPage />} />
 
             {/* Auth Pages */}
             <Route path="/login" element={<LoginPage />} />
