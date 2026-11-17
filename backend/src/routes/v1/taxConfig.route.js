@@ -1,8 +1,9 @@
 const express = require('express');
 const taxConfigController = require('../../controllers/taxConfig.controller');
+const referenceController = require('../../controllers/reference.controller');
 const validateRequest = require('../../middleware/validateRequest');
 const validateObjectId = require('../../middleware/validateObjectId');
-const { createTaxConfigSchema, updateTaxConfigSchema, calculateTaxSchema, lookupQuerySchema } = require('../../validators/taxConfig.validator');
+const { createTaxConfigSchema, updateTaxConfigSchema, calculateTaxSchema, lookupQuerySchema, confirmTaxConfigSchema } = require('../../validators/taxConfig.validator');
 const { protect } = require('../../middleware/auth');
 
 const router = express.Router();
@@ -10,8 +11,9 @@ const router = express.Router();
 // All tax routes require authentication
 router.use(protect);
 
-// Lookup must be defined BEFORE /:id to avoid route conflict
+// Lookup and Confirm must be defined BEFORE /:id to avoid route conflict
 router.get('/lookup', validateRequest(lookupQuerySchema, 'query'), taxConfigController.lookup);
+router.post('/confirm', validateRequest(confirmTaxConfigSchema), referenceController.confirm);
 
 // Tax calculation endpoint (for testing/debugging)
 router.post('/calculate', validateRequest(calculateTaxSchema), taxConfigController.calculateTax);

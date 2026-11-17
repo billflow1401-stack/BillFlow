@@ -373,16 +373,33 @@ const TaxConfigPage = () => {
             {configs.map(c => (
               <Tr key={c._id} className={!c.isActive ? 'opacity-60 bg-slate-50/50' : ''}>
                 <Td>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                    {c.hsnSac}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                      {c.hsnSac}
+                    </span>
+                    {c.isOfficialReference && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">
+                        Official
+                      </span>
+                    )}
+                    {c.isManualOverride && (
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
+                        Override
+                      </span>
+                    )}
+                  </div>
                 </Td>
                 <Td>
                   <Badge variant={c.classificationType === 'HSN' ? 'info' : 'purple'}>
                     {c.classificationType}
                   </Badge>
                 </Td>
-                <Td className="text-xs text-slate-700">{c.description || '—'}</Td>
+                <Td className="text-xs text-slate-700">
+                  <div>{c.description || '—'}</div>
+                  {c.notificationReference && (
+                    <div className="text-[10px] text-slate-400 mt-0.5">{c.notificationReference}</div>
+                  )}
+                </Td>
                 <Td className="text-right font-bold text-slate-900 tabular-nums">{c.gstRate}%</Td>
                 <Td className="text-xs font-medium text-slate-600">{c.taxTreatment}</Td>
                 <Td>

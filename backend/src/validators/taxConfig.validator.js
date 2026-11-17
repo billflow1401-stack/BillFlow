@@ -4,11 +4,17 @@ const Money = require('../utils/money');
 const createTaxConfigSchema = z.object({
   hsnSac: z.string().min(1, 'HSN/SAC code is required').max(20).regex(/^\d+$/, 'HSN/SAC code must be numeric'),
   classificationType: z.enum(['HSN', 'SAC'], { message: 'classificationType must be HSN or SAC' }),
+  ruleId: z.string().max(100).optional(),
+  ruleVersion: z.string().max(20).optional(),
   description: z.string().max(500).optional(),
   gstRate: z.number().min(0, 'GST rate cannot be negative').max(100, 'GST rate cannot exceed 100'),
   taxTreatment: z.enum(['TAXABLE', 'NIL_RATED', 'EXEMPT', 'NON_GST'], {
     message: 'taxTreatment must be TAXABLE, NIL_RATED, EXEMPT, or NON_GST'
   }).optional(),
+  isOfficialReference: z.boolean().optional(),
+  isManualOverride: z.boolean().optional(),
+  overrideReasonCategory: z.enum(['NONE', 'ADVANCE_RULING', 'SPECIFIC_EXEMPTION', 'EXPORT_BOND', 'OTHER']).nullable().optional(),
+  overrideReasonDetails: z.string().max(1000).nullable().optional(),
   effectiveFrom: z.string().datetime().nullable().optional(),
   effectiveTo: z.string().datetime().nullable().optional(),
   sourceReference: z.string().max(200).optional(),
@@ -18,9 +24,15 @@ const createTaxConfigSchema = z.object({
 const updateTaxConfigSchema = z.object({
   hsnSac: z.string().min(1).max(20).regex(/^\d+$/, 'HSN/SAC code must be numeric').optional(),
   classificationType: z.enum(['HSN', 'SAC'], { message: 'classificationType must be HSN or SAC' }).optional(),
+  ruleId: z.string().max(100).optional(),
+  ruleVersion: z.string().max(20).optional(),
   description: z.string().max(500).optional(),
   gstRate: z.number().min(0).max(100).optional(),
   taxTreatment: z.enum(['TAXABLE', 'NIL_RATED', 'EXEMPT', 'NON_GST']).optional(),
+  isOfficialReference: z.boolean().optional(),
+  isManualOverride: z.boolean().optional(),
+  overrideReasonCategory: z.enum(['NONE', 'ADVANCE_RULING', 'SPECIFIC_EXEMPTION', 'EXPORT_BOND', 'OTHER']).nullable().optional(),
+  overrideReasonDetails: z.string().max(1000).nullable().optional(),
   effectiveFrom: z.string().datetime().nullable().optional(),
   effectiveTo: z.string().datetime().nullable().optional(),
   sourceReference: z.string().max(200).optional(),
@@ -57,4 +69,22 @@ const lookupQuerySchema = z.object({
   message: "Provide either code or description query parameter"
 });
 
-module.exports = { createTaxConfigSchema, updateTaxConfigSchema, calculateTaxSchema, lookupQuerySchema };
+const confirmTaxConfigSchema = z.object({
+  classificationType: z.enum(['HSN', 'SAC'], { message: 'classificationType must be HSN or SAC' }),
+  hsnSac: z.string().min(1, 'HSN/SAC code is required').max(20).regex(/^\d+$/, 'HSN/SAC code must be numeric'),
+  ruleId: z.string().max(100).optional(),
+  description: z.string().max(500).optional(),
+  isManualOverride: z.boolean().optional(),
+  overrideReasonCategory: z.enum(['NONE', 'ADVANCE_RULING', 'SPECIFIC_EXEMPTION', 'EXPORT_BOND', 'OTHER']).nullable().optional(),
+  overrideReasonDetails: z.string().max(1000).nullable().optional(),
+  overrideGstRate: z.number().min(0).max(100).optional(),
+  overrideTaxTreatment: z.enum(['TAXABLE', 'NIL_RATED', 'EXEMPT', 'NON_GST']).optional()
+});
+
+module.exports = {
+  createTaxConfigSchema,
+  updateTaxConfigSchema,
+  calculateTaxSchema,
+  lookupQuerySchema,
+  confirmTaxConfigSchema
+};

@@ -8,19 +8,20 @@ import Modal from '../components/ui/Modal';
 import { Table, Thead, Tbody, Tr, Th, Td } from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
+import OfficialTaxSelector from '../components/tax/OfficialTaxSelector';
 import { formatApiError } from '../utils/apiError';
 import { formatCurrency } from '../utils/formatters';
 
 const emptyProductForm = {
   name: '', type: 'Product', description: '', sku: '', unit: 'pcs',
-  hsnSac: '', taxType: 'Exclusive',
+  hsnSac: '', taxConfigId: null, taxType: 'Exclusive',
   unitPrice: '', costPrice: '', currentStock: '', lowStockThreshold: '',
   isActive: true, notes: ''
 };
 
 const emptyServiceForm = {
   name: '', type: 'Service', description: '', unit: 'hr',
-  hsnSac: '', taxType: 'Exclusive',
+  hsnSac: '', taxConfigId: null, taxType: 'Exclusive',
   unitPrice: '', isActive: true, notes: ''
 };
 
@@ -121,11 +122,12 @@ const ItemsPage = () => {
 
   const openEditModal = (item) => {
     setEditingItem(item);
+    const taxConfigId = item.taxConfigId?._id || item.taxConfigId || null;
     if (item.type === 'Service') {
       setFormData({
         name: item.name || '', type: 'Service',
         description: item.description || '', unit: item.unit || 'hr',
-        hsnSac: item.hsnSac || '', taxType: item.taxType || 'Exclusive',
+        hsnSac: item.hsnSac || '', taxConfigId, taxType: item.taxType || 'Exclusive',
         unitPrice: item.unitPrice != null ? String(item.unitPrice) : '',
         isActive: item.isActive ?? true, notes: item.notes || ''
       });
@@ -133,7 +135,7 @@ const ItemsPage = () => {
       setFormData({
         name: item.name || '', type: 'Product',
         description: item.description || '', sku: item.sku || '', unit: item.unit || 'pcs',
-        hsnSac: item.hsnSac || '', taxType: item.taxType || 'Exclusive',
+        hsnSac: item.hsnSac || '', taxConfigId, taxType: item.taxType || 'Exclusive',
         unitPrice: item.unitPrice != null ? String(item.unitPrice) : '',
         costPrice: item.costPrice != null ? String(item.costPrice) : '',
         currentStock: item.currentStock != null ? String(item.currentStock) : '',
@@ -174,6 +176,9 @@ const ItemsPage = () => {
 
       if (!payload.hsnSac) {
         delete payload.hsnSac;
+      }
+      if (!payload.taxConfigId) {
+        delete payload.taxConfigId;
       }
       if (!payload.taxType) {
         delete payload.taxType;
@@ -267,11 +272,10 @@ const ItemsPage = () => {
         {['', 'Product', 'Service'].map(t => (
           <button
             key={t || 'All'}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
-              filterType === t
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${filterType === t
                 ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/60'
                 : 'text-slate-600 hover:text-slate-900'
-            }`}
+              }`}
             onClick={() => updateParams({ type: t, page: 1 })}
           >
             {t === '' ? 'All Items' : t + 's'}
@@ -393,9 +397,19 @@ const ItemsPage = () => {
                 <Td className="text-xs font-mono text-slate-600">{item.sku || '—'}</Td>
                 <Td>
                   {item.hsnSac ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                      {item.hsnSac}
-                    </span>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                        {item.type === 'Service' ? 'SAC' : 'HSN'} {item.hsnSac}
+                      </span>
+                      {item.taxConfigId?.isOfficialReference && (
+                        <span
+                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          title="Official Indian Govt Statutory Reference"
+                        >
+                          Govt Ref
+                        </span>
+                      )}
+                    </div>
                   ) : (
                     <span className="text-slate-400 text-xs italic">None</span>
                   )}
@@ -410,11 +424,10 @@ const ItemsPage = () => {
                 <Td className="text-right">
                   {item.type === 'Product' ? (
                     item.currentStock != null ? (
-                      <span className={`font-semibold tabular-nums text-xs px-2 py-0.5 rounded ${
-                        item.lowStockThreshold && item.currentStock <= item.lowStockThreshold
+                      <span className={`font-semibold tabular-nums text-xs px-2 py-0.5 rounded ${item.lowStockThreshold && item.currentStock <= item.lowStockThreshold
                           ? 'bg-amber-50 text-amber-700 border border-amber-200'
                           : 'text-slate-900'
-                      }`}>
+                        }`}>
                         {item.currentStock}
                       </span>
                     ) : '—'
@@ -564,38 +577,45 @@ const ItemsPage = () => {
           </div>
 
           <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3">Tax & GST Classification</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  HSN / SAC Code (Linked to Tax Config)
-                </label>
-                <select
-                  name="hsnSac"
-                  value={formData.hsnSac || ''}
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3">
+              Tax & GST Classification (Official Indian Govt HSN / SAC)
+            </h4>
+            <div className="space-y-4">
+              <OfficialTaxSelector
+                classificationType={formData.type === 'Service' ? 'SAC' : 'HSN'}
+                selectedTaxConfigId={formData.taxConfigId}
+                selectedHsnSac={formData.hsnSac}
+                savedTaxConfigs={taxConfigs}
+                onConfigConfirmed={(newConfig) => {
+                  setTaxConfigs(prev => {
+                    const existingIdx = prev.findIndex(c => c._id === newConfig._id);
+                    if (existingIdx >= 0) {
+                      const updated = [...prev];
+                      updated[existingIdx] = newConfig;
+                      return updated;
+                    }
+                    return [newConfig, ...prev];
+                  });
+                }}
+                onSelect={({ taxConfigId, hsnSac }) => {
+                  setFormData(prev => ({
+                    ...prev,
+                    taxConfigId: taxConfigId || null,
+                    hsnSac: hsnSac || ''
+                  }));
+                }}
+              />
+              <div className="w-full sm:w-1/2">
+                <Select
+                  label="Tax Pricing Mode"
+                  name="taxType"
+                  value={formData.taxType || 'Exclusive'}
                   onChange={handleChange}
-                  className="block w-full h-10 px-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-colors"
                 >
-                  <option value="">-- None (Non-GST / Exempt) --</option>
-                  {taxConfigs.map(tc => (
-                    <option key={tc._id} value={tc.hsnSac}>
-                      [{tc.classificationType} {tc.hsnSac}] {tc.gstRate}% GST — {tc.description}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Tax category from your Tax Config.
-                </p>
+                  <option value="Exclusive">Exclusive (GST added on top)</option>
+                  <option value="Inclusive">Inclusive (GST included in price)</option>
+                </Select>
               </div>
-              <Select
-                label="Tax Pricing Mode"
-                name="taxType"
-                value={formData.taxType || 'Exclusive'}
-                onChange={handleChange}
-              >
-                <option value="Exclusive">Exclusive (GST added on top)</option>
-                <option value="Inclusive">Inclusive (GST included in price)</option>
-              </Select>
             </div>
           </div>
 

@@ -1,0 +1,293 @@
+[
+  {
+    "code": "1006",
+    "type": "HSN",
+    "digits": 4,
+    "chapter": "10",
+    "heading": "1006",
+    "legalDescription": "Rice",
+    "tradeAliases": ["rice", "chawal", "paddy"],
+    "searchTokens": ["1006", "rice", "chawal", "paddy", "grain", "cereal"]
+  },
+  {
+    "code": "10061000",
+    "type": "HSN",
+    "digits": 8,
+    "chapter": "10",
+    "heading": "1006",
+    "legalDescription": "Rice in the husk (paddy or rough)",
+    "tradeAliases": ["paddy", "rough rice", "unhusked rice"],
+    "searchTokens": ["10061000", "paddy", "husk", "rough rice"]
+  },
+  {
+    "code": "10063010",
+    "type": "HSN",
+    "digits": 8,
+    "chapter": "10",
+    "heading": "1006",
+    "legalDescription": "Semi-milled or wholly milled rice, whether or not polished or glazed: Basmati rice",
+    "tradeAliases": ["basmati rice", "biryani rice", "milled basmati"],
+    "searchTokens": ["10063010", "basmati", "rice", "milled", "polished"]
+  },
+  {
+    "code": "10063090",
+    "type": "HSN",
+    "digits": 8,
+    "chapter": "10",
+    "heading": "1006",
+    "legalDescription": "Semi-milled or wholly milled rice, whether or not polished or glazed: Other (non-basmati)",
+    "tradeAliases": ["non-basmati rice", "white rice", "sona masoori", "kolam"],
+    "searchTokens": ["10063090", "non-basmati", "rice", "white rice", "sona masoori"]
+  },
+  {
+    "code": "3101",
+    "type": "HSN",
+    "digits": 4,
+    "chapter": "31",
+    "heading": "3101",
+    "legalDescription": "Animal or vegetable fertilisers, whether or not mixed together or chemically treated; fertilisers produced by the mixing or chemical treatment of animal or vegetable products",
+    "tradeAliases": ["organic fertiliser", "bio fertiliser", "compost", "manure"],
+    "searchTokens": ["3101", "fertiliser", "organic", "bio", "manure", "compost"]
+  },
+  {
+    "code": "31010099",
+    "type": "HSN",
+    "digits": 8,
+    "chapter": "31",
+    "heading": "3101",
+    "legalDescription": "Animal or vegetable fertilisers: Other organic bio-fertilisers and registered bio-stimulants",
+    "tradeAliases": ["seaweed fertiliser", "bio stimulant", "organic plant food"],
+    "searchTokens": ["31010099", "seaweed", "bio-stimulant", "fertiliser", "fco"]
+  },
+  {
+    "code": "3105",
+    "type": "HSN",
+    "digits": 4,
+    "chapter": "31",
+    "heading": "3105",
+    "legalDescription": "Mineral or chemical fertilisers containing two or three of the fertilising elements nitrogen, phosphorus and potassium; other fertilisers",
+    "tradeAliases": ["npk fertiliser", "chemical fertiliser", "dap", "urea mixture"],
+    "searchTokens": ["3105", "npk", "chemical fertiliser", "dap", "potassium"]
+  },
+  {
+    "code": "4012",
+    "type": "HSN",
+    "digits": 4,
+    "chapter": "40",
+    "heading": "4012",
+    "legalDescription": "Retreaded or used pneumatic tyres of rubber; solid or cushion tyres, tyre treads and tyre flaps, of rubber",
+    "tradeAliases": ["retreaded tyres", "used tyres", "solid tyres", "tyre flaps"],
+    "searchTokens": ["4012", "tyres", "tires", "retreaded", "rubber"]
+  },
+  {
+    "code": "40121100",
+    "type": "HSN",
+    "digits": 8,
+    "chapter": "40",
+    "heading": "4012",
+    "legalDescription": "Retreaded tyres: Of a kind used on motor cars (including station wagons and racing cars)",
+    "tradeAliases": ["car tyres", "retreaded car tyre"],
+    "searchTokens": ["40121100", "car tyre", "motor car", "retreaded"]
+  },
+  {
+    "code": "40121910",
+    "type": "HSN",
+    "digits": 8,
+    "chapter": "40",
+    "heading": "4012",
+    "legalDescription": "Retreaded tyres: Of a kind used on tractors",
+    "tradeAliases": ["tractor tyres", "retreaded tractor tyre", "farm tyres"],
+    "searchTokens": ["40121910", "tractor tyre", "farm tyre", "retreaded tractor"]
+  },
+  {
+    "code": "6109",
+    "type": "HSN",
+    "digits": 4,
+    "chapter": "61",
+    "heading": "6109",
+    "legalDescription": "T-shirts, singlets and other vests, knitted or crocheted",
+    "tradeAliases": ["t-shirt", "tee", "vest", "polo shirt", "round neck"],
+    "searchTokens": ["6109", "t-shirt", "tshirt", "tee", "vest", "knitted", "apparel"]
+  },
+  {
+    "code": "61091000",
+    "type": "HSN",
+    "digits": 8,
+    "chapter": "61",
+    "heading": "6109",
+    "legalDescription": "T-shirts, singlets and other vests, knitted or crocheted: Of cotton",
+    "tradeAliases": ["cotton t-shirt", "cotton vest", "cotton tee"],
+    "searchTokens": ["61091000", "cotton", "t-shirt", "tshirt", "tee", "singlet"]
+  },
+  {
+    "code": "61099000",
+    "type": "HSN",
+    "digits": 8,
+    "chapter": "61",
+    "heading": "6109",
+    "legalDescription": "T-shirts, singlets and other vests, knitted or crocheted: Of other textile materials",
+    "tradeAliases": ["polyester t-shirt", "synthetic tee", "dry fit t-shirt"],
+    "searchTokens": ["61099000", "synthetic", "polyester", "dry fit", "t-shirt"]
+  },
+  {
+    "code": "6203",
+    "type": "HSN",
+    "digits": 4,
+    "chapter": "62",
+    "heading": "6203",
+    "legalDescription": "Men's or boys' suits, ensembles, jackets, blazers, trousers, bib and brace overalls, breeches and shorts (other than swimwear)",
+    "tradeAliases": ["mens trousers", "blazer", "formal suit", "jeans", "shorts"],
+    "searchTokens": ["6203", "suit", "jacket", "blazer", "trousers", "jeans", "mens"]
+  },
+  {
+    "code": "6403",
+    "type": "HSN",
+    "digits": 4,
+    "chapter": "64",
+    "heading": "6403",
+    "legalDescription": "Footwear with outer soles of rubber, plastics, leather or composition leather and uppers of leather",
+    "tradeAliases": ["leather shoes", "formal shoes", "leather boots", "loafers"],
+    "searchTokens": ["6403", "leather shoes", "footwear", "boots", "loafers"]
+  },
+  {
+    "code": "6404",
+    "type": "HSN",
+    "digits": 4,
+    "chapter": "64",
+    "heading": "6404",
+    "legalDescription": "Footwear with outer soles of rubber, plastics, leather or composition leather and uppers of textile materials",
+    "tradeAliases": ["sneakers", "sports shoes", "canvas shoes", "running shoes"],
+    "searchTokens": ["6404", "sneakers", "sports shoes", "canvas shoes", "running shoes", "footwear"]
+  },
+  {
+    "code": "8471",
+    "type": "HSN",
+    "digits": 4,
+    "chapter": "84",
+    "heading": "8471",
+    "legalDescription": "Automatic data processing machines and units thereof; magnetic or optical readers, machines for transcribing data onto data media in coded form and machines for processing such data",
+    "tradeAliases": ["computer", "pc", "laptop", "workstation", "server"],
+    "searchTokens": ["8471", "computer", "laptop", "pc", "workstation", "server", "data processing"]
+  },
+  {
+    "code": "84713010",
+    "type": "HSN",
+    "digits": 8,
+    "chapter": "84",
+    "heading": "8471",
+    "legalDescription": "Portable automatic data processing machines, weighing not more than 10 kg, consisting of at least a central processing unit, a keyboard and a display: Personal computer (laptop, notebook)",
+    "tradeAliases": ["laptop", "notebook pc", "macbook", "portable computer"],
+    "searchTokens": ["84713010", "laptop", "notebook", "portable computer", "personal computer"]
+  },
+  {
+    "code": "8517",
+    "type": "HSN",
+    "digits": 4,
+    "chapter": "85",
+    "heading": "8517",
+    "legalDescription": "Telephone sets, including smartphones and other telephones for cellular networks or for other wireless networks",
+    "tradeAliases": ["mobile phone", "smartphone", "cellular phone", "telephone"],
+    "searchTokens": ["8517", "mobile", "smartphone", "cellphone", "telephone"]
+  },
+  {
+    "code": "9963",
+    "type": "SAC",
+    "digits": 4,
+    "chapter": "99",
+    "heading": "9963",
+    "legalDescription": "Accommodation, food and beverage services",
+    "tradeAliases": ["hotel", "restaurant", "catering", "room stay", "food service"],
+    "searchTokens": ["9963", "hotel", "restaurant", "accommodation", "food", "beverage", "catering"]
+  },
+  {
+    "code": "996311",
+    "type": "SAC",
+    "digits": 6,
+    "chapter": "99",
+    "heading": "9963",
+    "legalDescription": "Room or unit accommodation services for students, patients, tourists and visitors",
+    "tradeAliases": ["hotel room", "lodging", "resort stay", "guest house"],
+    "searchTokens": ["996311", "hotel room", "room tariff", "accommodation", "lodging", "stay"]
+  },
+  {
+    "code": "996331",
+    "type": "SAC",
+    "digits": 6,
+    "chapter": "99",
+    "heading": "9963",
+    "legalDescription": "Services provided by restaurants, cafes and similar eating facilities including takeaway services",
+    "tradeAliases": ["restaurant food", "cafe dining", "food dine-in", "takeaway"],
+    "searchTokens": ["996331", "restaurant", "cafe", "dining", "eating", "food service"]
+  },
+  {
+    "code": "9965",
+    "type": "SAC",
+    "digits": 4,
+    "chapter": "99",
+    "heading": "9965",
+    "legalDescription": "Goods transport services",
+    "tradeAliases": ["goods transport", "freight", "logistics", "cargo transport"],
+    "searchTokens": ["9965", "transport", "goods transport", "freight", "logistics", "gta"]
+  },
+  {
+    "code": "996511",
+    "type": "SAC",
+    "digits": 6,
+    "chapter": "99",
+    "heading": "9965",
+    "legalDescription": "Road transport services of goods including local delivery cartage and freight forwarding",
+    "tradeAliases": ["local delivery", "goods delivery", "hyperlocal delivery", "trucking"],
+    "searchTokens": ["996511", "road transport", "local delivery", "delivery of goods", "cartage"]
+  },
+  {
+    "code": "9966",
+    "type": "SAC",
+    "digits": 4,
+    "chapter": "99",
+    "heading": "9966",
+    "legalDescription": "Rental services of transport vehicles with or without operator",
+    "tradeAliases": ["vehicle rental", "car rental", "taxi hire", "cab leasing"],
+    "searchTokens": ["9966", "rental", "vehicle rental", "car hire", "passenger motor vehicle"]
+  },
+  {
+    "code": "996601",
+    "type": "SAC",
+    "digits": 6,
+    "chapter": "99",
+    "heading": "9966",
+    "legalDescription": "Rental services of passenger motor vehicles with operator (including fuel costs)",
+    "tradeAliases": ["passenger car rental", "chauffeur car hire", "corporate cab rental"],
+    "searchTokens": ["996601", "passenger vehicle", "car rental with operator", "fuel included"]
+  },
+  {
+    "code": "9968",
+    "type": "SAC",
+    "digits": 4,
+    "chapter": "99",
+    "heading": "9968",
+    "legalDescription": "Postal and courier services (express parcel delivery)",
+    "tradeAliases": ["courier", "speed post", "parcel delivery", "express courier"],
+    "searchTokens": ["9968", "courier", "postal", "parcel", "express delivery", "courier service"]
+  },
+  {
+    "code": "9983",
+    "type": "SAC",
+    "digits": 4,
+    "chapter": "99",
+    "heading": "9983",
+    "legalDescription": "Other professional, technical and business services",
+    "tradeAliases": ["consulting", "professional services", "business consulting", "legal advisory"],
+    "searchTokens": ["9983", "consulting", "professional services", "technical services", "advisory"]
+  },
+  {
+    "code": "998313",
+    "type": "SAC",
+    "digits": 6,
+    "chapter": "99",
+    "heading": "9983",
+    "legalDescription": "Information technology consulting and support services including software development and systems integration",
+    "tradeAliases": ["it consulting", "software development", "tech support", "saas development"],
+    "searchTokens": ["998313", "it consulting", "software", "tech support", "cloud consulting"]
+  }
+]
+

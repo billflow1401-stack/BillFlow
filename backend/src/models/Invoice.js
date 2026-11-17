@@ -38,7 +38,17 @@ const invoiceItemSnapshotSchema = new mongoose.Schema({
   sgst: decimalField('sgst', false, '0.00'),
   igst: decimalField('igst', false, '0.00'),
   taxAmount: decimalField('taxAmount', true),
-  lineTotal: decimalField('lineTotal', true)
+  lineTotal: decimalField('lineTotal', true),
+  taxConfigId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxConfig', default: null },
+  ruleId: { type: String, default: null },
+  ruleVersion: { type: String, default: null },
+  conditionType: { type: String, default: null },
+  conditionDescription: { type: String, default: null },
+  notificationReference: { type: String, default: null },
+  datasetVersion: { type: String, default: null },
+  isManualOverride: { type: Boolean, default: false },
+  overrideReasonCategory: { type: String, default: null },
+  overrideReasonDetails: { type: String, default: null }
 }, { _id: false, toJSON: { getters: true }, toObject: { getters: true } });
 
 const invoiceSchema = new mongoose.Schema({

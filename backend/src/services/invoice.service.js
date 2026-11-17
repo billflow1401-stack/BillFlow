@@ -285,9 +285,25 @@ const calculateInvoice = async (businessId, optionsOrCustomerId, itemsPayload) =
   const items = itemIds.length > 0 ? await Item.find({ _id: { $in: itemIds }, businessId }) : [];
   const itemMap = new Map(items.map(i => [i._id.toString(), i]));
 
+  const taxConfigIds = [...new Set(items.map(i => i.taxConfigId).filter(Boolean))];
   const hsnSacs = [...new Set(items.map(i => i.hsnSac).filter(Boolean))];
-  const taxConfigs = hsnSacs.length > 0 ? await TaxConfig.find({ hsnSac: { $in: hsnSacs }, businessId }) : [];
-  const taxConfigMap = new Map(taxConfigs.map(tc => [tc.hsnSac, tc]));
+  
+  const [taxConfigsById, taxConfigsByHsn] = await Promise.all([
+    taxConfigIds.length > 0 ? TaxConfig.find({ _id: { $in: taxConfigIds }, businessId }) : [],
+    hsnSacs.length > 0 ? TaxConfig.find({ hsnSac: { $in: hsnSacs }, businessId }) : []
+  ]);
+
+  const taxConfigIdMap = new Map(taxConfigsById.map(tc => [tc._id.toString(), tc]));
+  const taxConfigHsnMap = new Map();
+  for (const tc of taxConfigsByHsn) {
+    const key = `${tc.classificationType}:${tc.hsnSac}`;
+    if (!taxConfigHsnMap.has(key)) {
+      taxConfigHsnMap.set(key, tc);
+    }
+    if (!taxConfigHsnMap.has(tc.hsnSac)) {
+      taxConfigHsnMap.set(tc.hsnSac, tc);
+    }
+  }
   // ---------------------
 
   for (const payloadItem of itemsPayload) {
@@ -331,24 +347,46 @@ const calculateInvoice = async (businessId, optionsOrCustomerId, itemsPayload) =
 
     const amountAfterDiscountDec = grossAmountDec.minus(discountDec);
 
-    // Fetch tax config if item has HSN/SAC
-    let taxTreatment = TAX_TREATMENT.TAXABLE; // Default assumption if no config implies taxable, but wait, Phase 8 says:
-    // "If required tax configuration is missing for a taxable item... return a clear validation error"
+    // Fetch tax config if item has taxConfigId or HSN/SAC
+    let taxTreatment = TAX_TREATMENT.TAXABLE;
     let gstRate = 0;
     let cgstRate = 0;
     let sgstRate = 0;
     let igstRate = 0;
     let classificationType = item.type === 'Service' ? 'SAC' : 'HSN'; // Fallback matching item type
+    let resolvedTaxConfig = null;
 
-    if (item.hsnSac) {
-      const taxConfig = taxConfigMap.get(item.hsnSac);
-      if (!taxConfig) {
+    if (item.taxConfigId) {
+      resolvedTaxConfig = taxConfigIdMap.get(item.taxConfigId.toString());
+      if (!resolvedTaxConfig) {
+        resolvedTaxConfig = await TaxConfig.findOne({ _id: item.taxConfigId, businessId });
+      }
+    }
+
+    if (!resolvedTaxConfig && item.hsnSac) {
+      const typeKey = `${item.type === 'Service' ? 'SAC' : 'HSN'}:${item.hsnSac}`;
+      resolvedTaxConfig = taxConfigHsnMap.get(typeKey) || taxConfigHsnMap.get(item.hsnSac);
+    }
+
+    if (item.hsnSac || resolvedTaxConfig) {
+      if (!resolvedTaxConfig) {
         throw new AppError(`Tax configuration missing for HSN/SAC ${item.hsnSac} (Item: ${item.name})`, 400);
       }
 
-      taxTreatment = taxConfig.taxTreatment;
-      gstRate = taxConfig.gstRate;
-      classificationType = taxConfig.classificationType;
+      // Validate tenant ownership
+      if (resolvedTaxConfig.businessId.toString() !== businessId.toString()) {
+        throw new AppError(`Unauthorized tax configuration for item ${item.name}`, 403);
+      }
+
+      // Validate classification type matches item type for official references
+      const expectedType = item.type === 'Service' ? 'SAC' : 'HSN';
+      if (resolvedTaxConfig.isOfficialReference && resolvedTaxConfig.classificationType !== expectedType) {
+        throw new AppError(`Classification type mismatch: Item is a ${item.type} but official tax reference is ${resolvedTaxConfig.classificationType} (${resolvedTaxConfig.hsnSac})`, 400);
+      }
+
+      taxTreatment = resolvedTaxConfig.taxTreatment;
+      gstRate = resolvedTaxConfig.gstRate;
+      classificationType = resolvedTaxConfig.classificationType;
 
       if (taxTreatment === TAX_TREATMENT.TAXABLE) {
         if (supplyType === 'INTRA_STATE') {
@@ -359,9 +397,7 @@ const calculateInvoice = async (businessId, optionsOrCustomerId, itemsPayload) =
         }
       }
     } else {
-      // If no HSN/SAC provided on item, we assume 0% Non-GST or require it.
-      // Safe fallback for items without GST configuration is NON_GST or 0% EXEMPT.
-      // Let's assume NON_GST for items not configured for tax.
+      // If no HSN/SAC provided on item, assume NON_GST or 0%
       taxTreatment = TAX_TREATMENT.NON_GST;
       gstRate = 0;
     }
@@ -381,7 +417,7 @@ const calculateInvoice = async (businessId, optionsOrCustomerId, itemsPayload) =
       name: item.name,
       description: item.description,
       sku: item.sku,
-      hsnSac: item.hsnSac,
+      hsnSac: item.hsnSac || resolvedTaxConfig?.hsnSac || null,
       classificationType,
       taxTreatment,
       quantity: payloadItem.quantity,
@@ -398,7 +434,18 @@ const calculateInvoice = async (businessId, optionsOrCustomerId, itemsPayload) =
       sgst: taxCalculation.sgst,
       igst: taxCalculation.igst,
       taxAmount: taxCalculation.totalGST,
-      lineTotal: taxCalculation.total
+      lineTotal: taxCalculation.total,
+      // Phase 2 / Phase 5 Statutory Snapshot Fields
+      taxConfigId: resolvedTaxConfig ? resolvedTaxConfig._id : null,
+      ruleId: resolvedTaxConfig?.ruleId || null,
+      ruleVersion: resolvedTaxConfig?.ruleVersion || null,
+      conditionType: resolvedTaxConfig?.conditionType || null,
+      conditionDescription: resolvedTaxConfig?.conditionDescription || null,
+      notificationReference: resolvedTaxConfig?.notificationReference || null,
+      datasetVersion: resolvedTaxConfig?.datasetVersion || null,
+      isManualOverride: !!resolvedTaxConfig?.isManualOverride,
+      overrideReasonCategory: resolvedTaxConfig?.overrideReasonCategory || null,
+      overrideReasonDetails: resolvedTaxConfig?.overrideReasonDetails || null
     });
 
     // Aggregate totals

@@ -19,6 +19,12 @@ const itemSchema = new mongoose.Schema({
   sku: { type: String, trim: true },
   unit: { type: String, trim: true },
   hsnSac: { type: String, trim: true },
+  taxConfigId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TaxConfig',
+    default: null,
+    index: true
+  },
   unitPrice: {
     type: mongoose.Schema.Types.Decimal128,
     required: [true, 'Selling price is required'],

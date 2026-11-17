@@ -1,4 +1,5 @@
 const Item = require('../models/Item');
+const TaxConfig = require('../models/TaxConfig');
 const AppError = require('../utils/AppError');
 
 /**
@@ -31,7 +32,7 @@ const getItems = async (businessId, query = {}) => {
   const skip = (page - 1) * limit;
 
   const [data, total] = await Promise.all([
-    Item.find(filter).sort(sortObj).skip(skip).limit(limit),
+    Item.find(filter).populate('taxConfigId').sort(sortObj).skip(skip).limit(limit),
     Item.countDocuments(filter)
   ]);
 
@@ -54,7 +55,7 @@ const getItems = async (businessId, query = {}) => {
  * Get a single item by ID, ensuring it belongs to the business.
  */
 const getItemById = async (businessId, itemId) => {
-  const item = await Item.findOne({ _id: itemId, businessId });
+  const item = await Item.findOne({ _id: itemId, businessId }).populate('taxConfigId');
   if (!item) {
     throw new AppError('Item not found', 404);
   }
@@ -73,6 +74,18 @@ const createItem = async (businessId, data) => {
     data.currentStock = null;
     data.lowStockThreshold = null;
     data.costPrice = null;
+  }
+
+  if (data.taxConfigId) {
+    const taxConfig = await TaxConfig.findOne({ _id: data.taxConfigId, businessId });
+    if (!taxConfig) {
+      throw new AppError('Tax configuration not found or does not belong to business', 400);
+    }
+    const expectedType = data.type === 'Service' ? 'SAC' : 'HSN';
+    if (taxConfig.isOfficialReference && taxConfig.classificationType !== expectedType) {
+      throw new AppError(`Classification type mismatch: Item is a ${data.type} but tax configuration is ${taxConfig.classificationType}`, 400);
+    }
+    data.hsnSac = taxConfig.hsnSac;
   }
 
   const item = await Item.create({
@@ -107,6 +120,18 @@ const updateItem = async (businessId, itemId, updateData) => {
     updateData.currentStock = null;
     updateData.lowStockThreshold = null;
     updateData.costPrice = null;
+  }
+
+  if (updateData.taxConfigId) {
+    const taxConfig = await TaxConfig.findOne({ _id: updateData.taxConfigId, businessId });
+    if (!taxConfig) {
+      throw new AppError('Tax configuration not found or does not belong to business', 400);
+    }
+    const expectedType = effectiveType === 'Service' ? 'SAC' : 'HSN';
+    if (taxConfig.isOfficialReference && taxConfig.classificationType !== expectedType) {
+      throw new AppError(`Classification type mismatch: Item is a ${effectiveType} but tax configuration is ${taxConfig.classificationType}`, 400);
+    }
+    updateData.hsnSac = taxConfig.hsnSac;
   }
 
   const item = await Item.findOneAndUpdate(

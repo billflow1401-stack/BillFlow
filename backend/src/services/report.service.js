@@ -16,31 +16,145 @@ const getBaseMatch = (businessId, startDate, endDate) => {
 const getSalesReport = async (businessId, startDate, endDate) => {
   const match = getBaseMatch(businessId, startDate, endDate);
 
-  const stats = await Invoice.aggregate([
+  const [result] = await Invoice.aggregate([
     { $match: match },
     {
-      $group: {
-        _id: null,
-        salesTotal: { $sum: "$summary.grandTotal" },
-        taxableTotal: { $sum: "$summary.taxableTotal" },
-        taxTotal: { $sum: "$summary.taxTotal" },
-        invoiceCount: { $sum: 1 },
-        paidAgainstIncludedInvoices: { $sum: "$paymentStatus.paidAmount" },
-        balanceDueOnIncludedInvoices: { $sum: "$paymentStatus.balanceDue" }
+      $facet: {
+        summary: [
+          {
+            $group: {
+              _id: null,
+              salesTotal: { $sum: "$summary.grandTotal" },
+              taxableTotal: { $sum: "$summary.taxableTotal" },
+              taxTotal: { $sum: "$summary.taxTotal" },
+              cgstTotal: { $sum: "$summary.cgstTotal" },
+              sgstTotal: { $sum: "$summary.sgstTotal" },
+              igstTotal: { $sum: "$summary.igstTotal" },
+              discountTotal: { $sum: "$summary.discountTotal" },
+              invoiceCount: { $sum: 1 },
+              paidAgainstIncludedInvoices: { $sum: "$paymentStatus.paidAmount" },
+              balanceDueOnIncludedInvoices: { $sum: "$paymentStatus.balanceDue" },
+              settledCount: {
+                $sum: { $cond: [{ $eq: ["$paymentStatus.isSettled", true] }, 1, 0] }
+              },
+              unsettledCount: {
+                $sum: { $cond: [{ $ne: ["$paymentStatus.isSettled", true] }, 1, 0] }
+              },
+              intraStateCount: {
+                $sum: { $cond: [{ $eq: ["$supplyType", "INTRA_STATE"] }, 1, 0] }
+              },
+              interStateCount: {
+                $sum: { $cond: [{ $eq: ["$supplyType", "INTER_STATE"] }, 1, 0] }
+              }
+            }
+          }
+        ],
+        typeBreakdown: [
+          { $unwind: "$items" },
+          {
+            $group: {
+              _id: "$items.type",
+              salesTotal: { $sum: "$items.lineTotal" },
+              taxableTotal: { $sum: "$items.taxableValue" },
+              taxTotal: { $sum: "$items.taxAmount" },
+              totalUnits: { $sum: "$items.quantity" },
+              lineCount: { $sum: 1 }
+            }
+          },
+          {
+            $project: {
+              _id: 0,
+              type: "$_id",
+              salesTotal: 1,
+              taxableTotal: 1,
+              taxTotal: 1,
+              totalUnits: 1,
+              lineCount: 1
+            }
+          }
+        ],
+        topItems: [
+          { $unwind: "$items" },
+          {
+            $group: {
+              _id: {
+                name: "$items.name",
+                type: "$items.type",
+                hsnSac: "$items.hsnSac"
+              },
+              lineTotal: { $sum: "$items.lineTotal" },
+              taxableValue: { $sum: "$items.taxableValue" },
+              taxAmount: { $sum: "$items.taxAmount" },
+              unitsSold: { $sum: "$items.quantity" }
+            }
+          },
+          { $sort: { lineTotal: -1 } },
+          { $limit: 5 },
+          {
+            $project: {
+              _id: 0,
+              name: "$_id.name",
+              type: "$_id.type",
+              hsnSac: "$_id.hsnSac",
+              lineTotal: 1,
+              taxableValue: 1,
+              taxAmount: 1,
+              unitsSold: 1
+            }
+          }
+        ],
+        rateSlabs: [
+          { $unwind: "$items" },
+          {
+            $group: {
+              _id: "$items.gstRate",
+              taxableValue: { $sum: "$items.taxableValue" },
+              taxAmount: { $sum: "$items.taxAmount" },
+              lineTotal: { $sum: "$items.lineTotal" },
+              count: { $sum: 1 }
+            }
+          },
+          { $sort: { _id: 1 } },
+          {
+            $project: {
+              _id: 0,
+              gstRate: "$_id",
+              taxableValue: 1,
+              taxAmount: 1,
+              lineTotal: 1,
+              count: 1
+            }
+          }
+        ]
       }
     }
   ]);
 
-  const defaultStats = {
+  const summary = result?.summary?.[0] || {
     salesTotal: '0.00',
     taxableTotal: '0.00',
     taxTotal: '0.00',
+    cgstTotal: '0.00',
+    sgstTotal: '0.00',
+    igstTotal: '0.00',
+    discountTotal: '0.00',
     invoiceCount: 0,
     paidAgainstIncludedInvoices: '0.00',
-    balanceDueOnIncludedInvoices: '0.00'
+    balanceDueOnIncludedInvoices: '0.00',
+    settledCount: 0,
+    unsettledCount: 0,
+    intraStateCount: 0,
+    interStateCount: 0
   };
 
-  return serializeMonetary(stats[0] || defaultStats);
+  const response = {
+    ...summary,
+    typeBreakdown: result?.typeBreakdown || [],
+    topItems: result?.topItems || [],
+    rateSlabs: result?.rateSlabs || []
+  };
+
+  return serializeMonetary(response);
 };
 
 const getGSTSummary = async (businessId, startDate, endDate) => {
